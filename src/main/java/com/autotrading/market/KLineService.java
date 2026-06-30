@@ -145,7 +145,11 @@ public class KLineService {
         fetchAll(stocks);
     }
 
-    public int cachedStockCount() { return closePriceCache.size(); }
+    public int cachedStockCount() {
+        return (int) closePriceCache.keySet().stream()
+                .filter(k -> !k.startsWith(WEEK_PREFIX))
+                .count();
+    }
 
     /** Maps a frequency label to the Futu KL type value. */
     private int klTypeValue(String frequency) {

@@ -86,6 +86,22 @@
     font-family: "SF Mono","Cascadia Code",monospace; }
   .signal-reason { flex: 1; line-height: 1.5; }
   .signal-strategy { color: var(--purple); font-size: 11px; }
+  
+  /* AI Analysis specific styles */
+  .ai-analyze-btn { width: 100%; padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s; margin-bottom: 8px; }
+  .ai-analyze-btn:hover { opacity: 0.9; }
+  .ai-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .rating-tag { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .rating-tag.BUY { background: rgba(63,185,80,0.15); color: var(--green); }
+  .rating-tag.SELL { background: rgba(248,81,73,0.15); color: var(--red); }
+  .rating-tag.HOLD { background: rgba(139,148,158,0.15); color: var(--text-dim); }
+  .history-item { padding: 10px 12px; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .history-item:last-child { border-bottom: none; }
+  .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .history-summary { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+  .history-target { font-family: "SF Mono","Cascadia Code",monospace; font-size: 12px; color: var(--yellow); }
 </style>
 </head>
 <body>
@@ -141,6 +157,16 @@
 
   <div class="sidebar">
     <div class="panel">
+      <div class="panel-header">🤖 AI Stock Analysis</div>
+      <div class="panel-body">
+        <button class="ai-analyze-btn" id="ai-analyze-btn" onclick="runAIAnalysis()">
+          🔮 AI 智能分析
+        </button>
+        <div id="ai-analysis-result"><div class="loading" style="padding:20px">点击按钮开始分析...</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
       <div class="panel-header">Analysis Strategy</div>
       <div class="panel-body">
         <select class="strategy-select" id="strategy-select" onchange="runAnalysis()">
@@ -152,6 +178,13 @@
           <option value="volume">量价分析</option>
         </select>
         <div id="analysis-result"><div class="loading">Select and analyze...</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">📋 Analysis History</div>
+      <div id="analysis-history">
+        <div class="loading" style="padding:20px">加载历史记录...</div>
       </div>
     </div>
 
@@ -222,6 +255,7 @@ async function init() {
     renderBreakouts(data);
     runAnalysis();
     loadSignals();
+    loadAnalysisHistory();
   } catch(e) {
     document.getElementById('chart').innerHTML = '<div class="loading">Failed to load: ' + e.message + '</div>';
   }
@@ -435,6 +469,110 @@ async function runAnalysis() {
     el.innerHTML = html + detailHtml;
   } catch(e) {
     el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">Error</div>' + e.message + '</div>';
+  }
+}
+
+async function runAIAnalysis() {
+  var btn = document.getElementById('ai-analyze-btn');
+  var el = document.getElementById('ai-analysis-result');
+  
+  btn.disabled = true;
+  btn.textContent = '分析中...';
+  el.innerHTML = '<div class="loading">AI 正在分析股票数据，请稍候...</div>';
+
+  try {
+    var resp = await fetch('/api/stock/' + market + '/' + code + '/analyze-ai', {
+      method: 'POST'
+    });
+    var data = await resp.json();
+
+    if (!data.success) {
+      el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">分析失败</div>' + 
+        (data.error || '未知错误') + '</div>';
+      return;
+    }
+
+    var rating = data.rating || 'HOLD';
+    var ratingClass = rating === 'BUY' ? 'bullish' : rating === 'SELL' ? 'bearish' : 'neutral';
+    var ratingText = rating === 'BUY' ? '买入' : rating === 'SELL' ? '卖出' : '持有';
+
+    var html = '<div class="signal-box ' + ratingClass + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span class="signal-type">评级: ' + ratingText + '</span>' +
+        '<span class="rating-tag ' + rating + '">' + rating + '</span>' +
+      '</div>';
+    
+    if (data.targetPrice) {
+      html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">' +
+        '目标价: <span style="color:var(--yellow);font-weight:600">$' + data.targetPrice.toFixed(2) + '</span></div>';
+    }
+    
+    if (data.summary) {
+      html += '<div style="font-size:13px;line-height:1.6">' + data.summary + '</div>';
+    }
+    
+    html += '</div>';
+
+    // Additional analysis details if available
+    if (data.analysis) {
+      html += '<div style="margin-top:12px">';
+      if (typeof data.analysis === 'object') {
+        for (var key in data.analysis) {
+          var val = data.analysis[key];
+          if (typeof val === 'string' || typeof val === 'number') {
+            html += '<div class="indicator-row"><span class="label">' + key + 
+              '</span><span class="value">' + val + '</span></div>';
+          }
+        }
+      } else {
+        html += '<div style="font-size:12px;color:var(--text-dim)">' + data.analysis + '</div>';
+      }
+      html += '</div>';
+    }
+
+    el.innerHTML = html;
+    
+    // Reload history to show the new analysis
+    loadAnalysisHistory();
+
+  } catch(e) {
+    el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">错误</div>' + 
+      '分析请求失败: ' + e.message + '</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔮 AI 智能分析';
+  }
+}
+
+async function loadAnalysisHistory() {
+  var el = document.getElementById('analysis-history');
+  
+  try {
+    var resp = await fetch('/api/stock/' + market + '/' + code + '/analysis-history');
+    var data = await resp.json();
+    
+    var history = data.history || [];
+    
+    if (history.length === 0) {
+      el.innerHTML = '<div class="loading" style="padding:20px">暂无分析历史</div>';
+      return;
+    }
+
+    var html = history.slice(0, 10).map(function(item) {
+      return '<div class="history-item">' +
+        '<div class="history-header">' +
+          '<span class="rating-tag ' + (item.rating || 'HOLD') + '">' + (item.rating || 'HOLD') + '</span>' +
+          '<span class="signal-date">' + (item.tradeDate || '') + '</span>' +
+        '</div>' +
+        '<div class="history-summary">' + (item.summary || '无摘要') + '</div>' +
+        (item.targetPrice ? '<div class="history-target">目标价: $' + item.targetPrice.toFixed(2) + '</div>' : '') +
+      '</div>';
+    }).join('');
+    
+    el.innerHTML = html;
+    
+  } catch(e) {
+    el.innerHTML = '<div class="loading" style="padding:20px">历史记录加载失败: ' + e.message + '</div>';
   }
 }
 

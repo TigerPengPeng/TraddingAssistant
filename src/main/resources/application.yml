@@ -28,6 +28,11 @@ spring:
       mail.smtp.socketFactory.port: ${MAIL_PORT:465}
       mail.smtp.socketFactory.class: javax.net.ssl.SSLSocketFactory
 
+ai:
+  analysis:
+    api:
+      url: ${AI_ANALYSIS_API_URL:http://host.docker.internal:9000/api/analyze}
+
 futu:
   opend:
     ip: ${OPEND_IP:127.0.0.1}

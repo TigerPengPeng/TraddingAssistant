@@ -422,7 +422,7 @@ function renderMAAlertRules() {
       '<select style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px" onchange="maAlertRules[' + i + '].logic=this.value">' +
       '<option value="OR"' + (r.logic==='OR'?' selected':'') + '>OR</option>' +
       '<option value="AND"' + (r.logic==='AND'?' selected':'') + '>AND</option></select>' +
-      '<button class="btn" style="padding:2px 6px" onclick="maAlertRules[' + i + '].conditions.push({frequency:`day`,maPeriod:5,direction:`BREAK_UP`});renderMAAlertRules()">+ 条件</button>' +
+      '<button class="btn" style="padding:2px 6px" onclick="maAlertRules[' + i + '].conditions.push({frequency:'day',maPeriod:5,direction:'BREAK_UP'});renderMAAlertRules()">+ 条件</button>' +
       '<button class="btn" style="padding:2px 6px" onclick="maAlertRules.splice(' + i + ',1);renderMAAlertRules()">删除规则</button>' +
       '</div>' + conds + '</div>';
   }).join('');

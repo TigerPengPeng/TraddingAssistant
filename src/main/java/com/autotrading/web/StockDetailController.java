@@ -1,5 +1,6 @@
 package com.autotrading.web;
 
+import com.autotrading.market.ExternalAnalysisService;
 import com.autotrading.market.KLineService;
 import com.autotrading.market.MarketSessionService;
 import com.autotrading.market.SnapshotPollingService;
@@ -26,17 +27,20 @@ public class StockDetailController {
     private final SnapshotPollingService snapshotService;
     private final QuoteProcessor quoteProcessor;
     private final TradingSignalService signalService;
+    private final ExternalAnalysisService externalAnalysisService;
 
     public StockDetailController(KLineService kLineService, StockAnalysisService analysisService,
                                   MarketSessionService sessionService, SnapshotPollingService snapshotService,
                                   QuoteProcessor quoteProcessor,
-                                  TradingSignalService signalService) {
+                                  TradingSignalService signalService,
+                                  ExternalAnalysisService externalAnalysisService) {
         this.kLineService = kLineService;
         this.analysisService = analysisService;
         this.sessionService = sessionService;
         this.snapshotService = snapshotService;
         this.quoteProcessor = quoteProcessor;
         this.signalService = signalService;
+        this.externalAnalysisService = externalAnalysisService;
     }
 
     @GetMapping("/{market}/{code}/kline")
@@ -87,6 +91,22 @@ public class StockDetailController {
             @PathVariable int market, @PathVariable String code,
             @RequestParam(defaultValue = "ma_crossover") String strategy) {
         return analysisService.analyze(market, code, strategy);
+    }
+
+    @PostMapping("/{market}/{code}/analyze-ai")
+    public Map<String, Object> analyzeWithAI(@PathVariable int market, @PathVariable String code) {
+        return externalAnalysisService.analyzeStock(market, code);
+    }
+
+    @GetMapping("/{market}/{code}/analysis-history")
+    public Map<String, Object> getAnalysisHistory(@PathVariable int market, @PathVariable String code) {
+        List<Map<String, Object>> history = externalAnalysisService.getHistory(market, code);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("code", code);
+        result.put("market", market);
+        result.put("count", history.size());
+        result.put("history", history);
+        return result;
     }
 
     @GetMapping("/{market}/{code}/signals")
