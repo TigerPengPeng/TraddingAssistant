@@ -651,7 +651,7 @@ function renderSignalRecords(signals) {
         '</span>' +
       '</span>' +
       '<span class="alert-price">' + fmtPrice(s.price) + '</span>' +
-      '<span class="alert-time">' + s.signalDate + '</span>' +
+      '<span class="alert-time">' + (s.signalDate ? s.signalDate.slice(0, 16) : '') + '</span>' +
     '</div>';
   }).join('');
   document.getElementById('signal-list').innerHTML = items;

@@ -97,7 +97,7 @@ public class TradingSignalScanner {
                         seedRecords.add(new SignalRecord(
                                 stock.key(), stock.getName(), latest.type().name(),
                                 latest.strategy(), latest.reason(), latest.price(),
-                                LocalDateTime.now().format(DATE_TIME_FMT), System.currentTimeMillis()));
+                                latest.date(), System.currentTimeMillis()));
                     }
                 } catch (Exception e) {
                     log.debug("Initial signal seed failed for {}: {}", stock.key(), e.getMessage());
@@ -137,7 +137,7 @@ public class TradingSignalScanner {
                 SignalRecord rec = new SignalRecord(
                         stock.key(), stock.getName(), latest.type().name(),
                         latest.strategy(), latest.reason(), latest.price(),
-                        LocalDateTime.now().format(DATE_TIME_FMT), System.currentTimeMillis());
+                        latest.date(), System.currentTimeMillis());
                 newSignals.add(rec);
 
             } catch (Exception e) {
