@@ -235,70 +235,67 @@ public class NotificationTemplate {
     }
 
 
-    // ---- Sector Trend Report ----
+    // ---- Right Trend Report ----
 
-    public static String sectorTrendBody(com.autotrading.market.SectorTrendReportService.SectorTrendReport report) {
+    public static String rightTrendBody(com.autotrading.market.RightTrendAnalysisService.RightTrendReport report) {
         StringBuilder sb = new StringBuilder();
-        sb.append("<h2 style=\"color:#58a6ff\">").append("行业趋势报告 - ").append(report.date()).append("</h2>");
+        String groupLabel = String.join("+", report.groupNames());
+        long inTrend = report.stocks().stream().filter(s -> s.isInRightTrend()).count();
+
+        sb.append("<h2 style=\"color:#16a34a\">")
+          .append("右侧趋势分析报告 - ").append(report.date()).append(" ").append(groupLabel).append("</h2>");
         sb.append("<p style=\"padding:12px 16px;background:#1a1a2e;border-radius:8px;color:#e6edf3;font-size:14px;margin-bottom:16px\">")
-          .append("<strong>市场总览: </strong>").append(report.overallSentiment()).append("</p>");
+          .append("<strong>汇总: </strong>共分析 ").append(report.stocks().size())
+          .append(" 只股票，其中 <span style=\"color:#16a34a;font-weight:700\">").append(inTrend)
+          .append("</span> 只已进入右侧趋势</p>");
 
-        sb.append("<table style=\"border-collapse:collapse;width:100%;font-size:13px\">");
-        sb.append("<tr><th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">板块</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">成分</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">看多</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">看空</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">5日%</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">20日%</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">情绪</th>")
-          .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">风险</th></tr>");
+        var sorted = report.stocks().stream()
+                .filter(s -> s.success())
+                .sorted((a, b) -> {
+                    if (a.isInRightTrend() != b.isInRightTrend())
+                        return a.isInRightTrend() ? -1 : 1;
+                    return confidenceRank(b.confidence()) - confidenceRank(a.confidence());
+                })
+                .toList();
 
-        for (var sector : report.sectors()) {
-            String sentimentColor = getSentimentColor(sector.sentiment());
-            String change5Color = sector.avgChange5d() >= 0 ? GREEN : RED;
-            String change20Color = sector.avgChange20d() >= 0 ? GREEN : RED;
-            String change5Str = String.format("%+.2f%%", sector.avgChange5d());
-            String change20Str = String.format("%+.2f%%", sector.avgChange20d());
-            String riskBar = String.format("%.0f", sector.riskScore());
+        if (sorted.isEmpty()) {
+            sb.append("<p style=\"padding:20px;background:#f9fafb;border-radius:8px;text-align:center\">")
+              .append("本次分析无有效结果</p>");
+        } else {
+            sb.append("<table style=\"border-collapse:collapse;width:100%;font-size:13px\">");
+            sb.append("<tr><th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">股票</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">分组</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">右侧趋势</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">置信度</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">关键信号</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">分析原因</th></tr>");
 
-            sb.append("<tr>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-weight:600\">").append(sector.sectorName()).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">").append(sector.memberCount()).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:").append(GREEN).append("\">").append(sector.bullishCount()).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:").append(RED).append("\">").append(sector.bearishCount()).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:").append(change5Color).append(";font-weight:600\">").append(change5Str).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:").append(change20Color).append(";font-weight:600\">").append(change20Str).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:").append(sentimentColor).append(";font-weight:600\">").append(sector.sentiment()).append("</td>")
-              .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;font-weight:700\">").append(riskBar).append("</td>")
-              .append("</tr>");
-        }
-        sb.append("</table>");
+            for (var stock : sorted) {
+                String trendIcon = stock.isInRightTrend()
+                        ? "<span style=\"color:#16a34a;font-weight:700\">是</span>"
+                        : "<span style=\"color:#dc2626\">否</span>";
+                String confColor = switch (stock.confidence()) {
+                    case "high" -> "#16a34a";
+                    case "medium" -> "#d29922";
+                    default -> "#8b949e";
+                };
 
-        // Per-sector stock details (collapsible in email, visible inline)
-        for (var sector : report.sectors()) {
-            if (sector.stocks().isEmpty()) continue;
-            sb.append("<h3 style=\"margin-top:16px;font-size:14px;color:#58a6ff\">")
-              .append(sector.sectorName()).append(" - 成分股明细</h3>");
-            sb.append("<table style=\"border-collapse:collapse;width:100%;font-size:12px\">");
-            sb.append("<tr><th style=\"padding:6px 8px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">股票</th>")
-              .append("<th style=\"padding:6px 8px;border:1px solid #e5e7eb;background:#f3f4f6\">现价</th>")
-              .append("<th style=\"padding:6px 8px;border:1px solid #e5e7eb;background:#f3f4f6\">5日%</th>")
-              .append("<th style=\"padding:6px 8px;border:1px solid #e5e7eb;background:#f3f4f6\">趋势</th>")
-              .append("<th style=\"padding:6px 8px;border:1px solid #e5e7eb;background:#f3f4f6\">跌破均线</th></tr>");
-
-            for (var stock : sector.stocks()) {
-                String trendColor = "看多".equals(stock.trend()) ? GREEN : "看空".equals(stock.trend()) ? RED : "#8b949e";
-                String changeColor = stock.change5d() >= 0 ? GREEN : RED;
-                String belowStr = stock.belowMA().isEmpty() ? "-" :
-                        stock.belowMA().stream().map(p -> "MA" + p).reduce((a, b) -> a + " " + b).orElse("-");
                 sb.append("<tr>")
-                  .append("<td style=\"padding:6px 8px;border:1px solid #e5e7eb\">").append(stock.stockName())
-                  .append(" <span style=\"color:#8b949e;font-size:11px\">").append(stock.stockKey()).append("</span></td>")
-                  .append("<td style=\"padding:6px 8px;border:1px solid #e5e7eb;text-align:center\">").append(formatPrice(stock.currentPrice())).append("</td>")
-                  .append("<td style=\"padding:6px 8px;border:1px solid #e5e7eb;text-align:center;color:").append(changeColor).append("\">")
-                  .append(String.format("%+.2f%%", stock.change5d())).append("</td>")
-                  .append("<td style=\"padding:6px 8px;border:1px solid #e5e7eb;text-align:center;color:").append(trendColor).append(";font-weight:600\">").append(stock.trend()).append("</td>")
-                  .append("<td style=\"padding:6px 8px;border:1px solid #e5e7eb;text-align:center;color:").append(stock.belowMA().isEmpty() ? "#8b949e" : RED).append("\">").append(belowStr).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-weight:600\">")
+                  .append(stock.stockName())
+                  .append(" <span style=\"color:#8b949e;font-size:12px\">")
+                  .append(stock.stockKey()).append("</span></td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
+                  .append(stock.groupName()).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
+                  .append(trendIcon).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:")
+                  .append(confColor).append(";font-weight:600\">").append(stock.confidence()).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-size:12px\">")
+                  .append(stock.keySignals().isEmpty() ? "-" : String.join("、", stock.keySignals()))
+                  .append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-size:12px\">")
+                  .append(stock.reason()).append("</td>")
                   .append("</tr>");
             }
             sb.append("</table>");
@@ -307,13 +304,13 @@ public class NotificationTemplate {
         return htmlWrap(sb.toString());
     }
 
-    private static String getSentimentColor(String sentiment) {
-        if (sentiment.contains("多")) return GREEN;
-        if (sentiment.contains("空")) return RED;
-        return "#d29922";
+    private static int confidenceRank(String confidence) {
+        return switch (confidence) {
+            case "high" -> 3;
+            case "medium" -> 2;
+            default -> 1;
+        };
     }
-
-
 
     // ---- Trading Signal ----
 

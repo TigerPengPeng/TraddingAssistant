@@ -4,7 +4,6 @@ import com.autotrading.config.NotificationProperties;
 import com.autotrading.market.RiskAssessmentService;
 import com.autotrading.model.MAEvent;
 import com.autotrading.monitor.TimeWindowFluctuationMonitor;
-import com.autotrading.market.SectorTrendReportService;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,16 +121,17 @@ public class EmailNotificationService {
     }
 
     @Async("emailExecutor")
-    public void sendSectorTrendReport(String subject, SectorTrendReportService.SectorTrendReport report) {
-        if (!canSend()) return;
-        String body = NotificationTemplate.sectorTrendBody(report);
-        sendHtml("行业趋势", subject, body);
-    }
-
-    @Async("emailExecutor")
     public void sendSignalAlert(String subject, String body) {
         if (!canSend()) return;
         sendHtml("买卖点", subject, body);
+    }
+
+    @Async("emailExecutor")
+    public void sendRightTrendReport(String subject,
+                                       com.autotrading.market.RightTrendAnalysisService.RightTrendReport report) {
+        if (!canSend()) return;
+        String body = NotificationTemplate.rightTrendBody(report);
+        sendHtml("右侧趋势", subject, body);
     }
 
     private boolean canSend() {
