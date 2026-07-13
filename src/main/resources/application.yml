@@ -42,9 +42,9 @@ deepseek:
     rate-limit-ms: ${DEEPSEEK_RATE_LIMIT_MS:500}
 
 right-trend:
-  group-us: ${RIGHT_TREND_GROUP_US:美股}
-  group-hk: ${RIGHT_TREND_GROUP_HK:港股}
-  group-cn: ${RIGHT_TREND_GROUP_CN:沪深}
+  group-us: ${RIGHT_TREND_GROUP_US:US}
+  group-hk: ${RIGHT_TREND_GROUP_HK:HK}
+  group-cn: ${RIGHT_TREND_GROUP_CN:CN}
   kline-lookback: 60
 
 futu:

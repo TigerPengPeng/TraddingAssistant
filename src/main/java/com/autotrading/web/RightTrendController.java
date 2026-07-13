@@ -1,5 +1,6 @@
 package com.autotrading.web;
 
+import com.autotrading.config.RightTrendProperties;
 import com.autotrading.monitor.RightTrendScheduler;
 import com.autotrading.market.RightTrendAnalysisService.RightTrendReport;
 import org.springframework.web.bind.annotation.*;
@@ -14,17 +15,20 @@ import java.util.*;
 public class RightTrendController {
 
     private final RightTrendScheduler scheduler;
+    private final RightTrendProperties properties;
 
-    public RightTrendController(RightTrendScheduler scheduler) {
+    public RightTrendController(RightTrendScheduler scheduler,
+                                  RightTrendProperties properties) {
         this.scheduler = scheduler;
+        this.properties = properties;
     }
 
     @PostMapping("/analyze")
     public Map<String, Object> analyze(
-            @RequestParam(defaultValue = "美股,港股,沪深") String groups,
+            @RequestParam(defaultValue = "all") String groups,
             @RequestParam(defaultValue = "false") boolean sendEmail) {
-        List<String> groupList = Arrays.asList(groups.split(","));
-        RightTrendReport report = scheduler.runAnalysis(groupList, sendEmail);
+        List<String> groupNames = resolveGroups(groups);
+        RightTrendReport report = scheduler.runAnalysis(groupNames, sendEmail);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "ok");
         result.put("report", report);
@@ -76,5 +80,21 @@ public class RightTrendController {
             result.put("report", report);
         }
         return result;
+    }
+
+    /**
+     * Maps aliases (us/hk/cn/all) to configured Futu group names.
+     * Also accepts comma-separated actual group names as fallback.
+     */
+    private List<String> resolveGroups(String input) {
+        String trimmed = input.trim().toLowerCase();
+        return switch (trimmed) {
+            case "all" -> List.of(properties.getGroupUs(), properties.getGroupHk(), properties.getGroupCn());
+            case "us" -> List.of(properties.getGroupUs());
+            case "hk" -> List.of(properties.getGroupHk());
+            case "cn" -> List.of(properties.getGroupCn());
+            case "hk_cn", "hk+cn", "hkcn" -> List.of(properties.getGroupHk(), properties.getGroupCn());
+            default -> Arrays.asList(input.split(","));
+        };
     }
 }
