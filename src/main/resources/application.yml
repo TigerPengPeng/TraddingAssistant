@@ -33,6 +33,20 @@ ai:
     api:
       url: ${AI_ANALYSIS_API_URL:http://host.docker.internal:9000/api/analyze}
 
+deepseek:
+  api:
+    key: ${DEEPSEEK_API_KEY:}
+    url: ${DEEPSEEK_API_URL:https://api.deepseek.com/v1/chat/completions}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+    timeout-ms: ${DEEPSEEK_TIMEOUT_MS:60000}
+    rate-limit-ms: ${DEEPSEEK_RATE_LIMIT_MS:500}
+
+right-trend:
+  group-us: ${RIGHT_TREND_GROUP_US:美股}
+  group-hk: ${RIGHT_TREND_GROUP_HK:港股}
+  group-cn: ${RIGHT_TREND_GROUP_CN:沪深}
+  kline-lookback: 60
+
 futu:
   opend:
     ip: ${OPEND_IP:127.0.0.1}

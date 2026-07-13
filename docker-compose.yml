@@ -24,6 +24,10 @@ services:
       MAIL_STARTTLS: ${MAIL_STARTTLS:-false}
       MAIL_TO: ${MAIL_TO:-}
       MAIL_ENABLED: ${MAIL_ENABLED:-true}
+      # DeepSeek AI
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-https://api.deepseek.com/v1/chat/completions}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       # Reconnect
       RECONNECT_INITIAL_DELAY_MS: ${RECONNECT_INITIAL_DELAY_MS:-5000}
       RECONNECT_MAX_DELAY_MS: ${RECONNECT_MAX_DELAY_MS:-60000}
