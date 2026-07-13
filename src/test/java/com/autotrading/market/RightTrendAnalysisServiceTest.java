@@ -57,7 +57,7 @@ class RightTrendAnalysisServiceTest {
         StockInfo stock2 = new StockInfo(2, "09988", "阿里");
 
         when(stockGroupService.getStocksInGroup("港股")).thenReturn(List.of(stock1, stock2));
-        when(kLineService.fetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
+        when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
         when(deepSeekClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList()))
                 .thenReturn(new DeepSeekAnalysis(true, true, "high", "up",
                         List.of("突破MA30"), "confirmed uptrend", null));
@@ -76,7 +76,7 @@ class RightTrendAnalysisServiceTest {
         StockInfo stock2 = new StockInfo(11, "MSFT", "Microsoft");
 
         when(stockGroupService.getStocksInGroup("美股")).thenReturn(List.of(stock1, stock2));
-        when(kLineService.fetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
+        when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
         when(deepSeekClient.analyzeRightTrend(eq("Apple"), anyString(), anyString(), anyList()))
                 .thenReturn(DeepSeekAnalysis.failed("API timeout"));
         when(deepSeekClient.analyzeRightTrend(eq("Microsoft"), anyString(), anyString(), anyList()))
@@ -107,8 +107,8 @@ class RightTrendAnalysisServiceTest {
         StockInfo stock1 = new StockInfo(11, "AAPL", "Apple");
 
         when(stockGroupService.getStocksInGroup("美股")).thenReturn(List.of(stock1));
-        when(kLineService.fetchKLines(any(StockInfo.class)))
-                .thenThrow(new RuntimeException("API error"));
+        when(kLineService.getOrFetchKLines(any(StockInfo.class)))
+                .thenReturn(List.of()); // cache miss + API quota exhausted
 
         RightTrendReport report = service.analyzeGroup("美股");
 

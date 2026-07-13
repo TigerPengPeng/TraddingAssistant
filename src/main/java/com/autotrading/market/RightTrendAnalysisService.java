@@ -97,12 +97,10 @@ public class RightTrendAnalysisService {
     private StockTrendResult analyzeSingleStock(StockInfo stock, String groupName, String tradeDate) {
         String marketLabel = marketLabel(stock.getMarket());
 
-        // Fetch fresh K-line data
-        List<KLineService.KLineData> klines;
-        try {
-            klines = kLineService.fetchKLines(stock);
-        } catch (Exception e) {
-            log.warn("Failed to fetch K-lines for {}: {}", stock.key(), e.getMessage());
+        // Cache-first: uses in-memory cache if available, only hits Futu API on miss
+        List<KLineService.KLineData> klines = kLineService.getOrFetchKLines(stock);
+        if (klines.isEmpty()) {
+            log.warn("No K-line data for {} (cache miss + API failed/quota)", stock.key());
             return StockTrendResult.failed(stock, groupName);
         }
 

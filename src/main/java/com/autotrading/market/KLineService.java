@@ -161,6 +161,25 @@ public class KLineService {
         return klTypeValue == KLType.KLType_Week_VALUE ? WEEK_PREFIX + stockKey : stockKey;
     }
 
+    /**
+     * Returns daily K-lines from cache if available, otherwise fetches from Futu API.
+     * Uses cache to conserve the Futu historical K-line quota (100/7 days for free tier).
+     * Returns empty list if cache miss and API call fails.
+     */
+    public List<KLineData> getOrFetchKLines(StockInfo stock) {
+        List<KLineData> cached = klineCache.get(stock.key());
+        if (cached != null && !cached.isEmpty()) {
+            log.debug("K-line cache hit for {}", stock.key());
+            return cached;
+        }
+        try {
+            return fetchKLines(stock);
+        } catch (AsyncRequestBridge.FutuRequestException e) {
+            log.warn("Failed to fetch K-lines for {}: {}", stock.key(), e.getMessage());
+            return List.of();
+        }
+    }
+
     public record KLineData(String time, double open, double high, double low, double close,
                             long volume, double changeRate) {}
 }
