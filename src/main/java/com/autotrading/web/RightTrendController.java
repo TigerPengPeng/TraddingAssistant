@@ -94,6 +94,7 @@ public class RightTrendController {
             case "hk" -> List.of(properties.getGroupHk());
             case "cn" -> List.of(properties.getGroupCn());
             case "hk_cn", "hk+cn", "hkcn" -> List.of(properties.getGroupHk(), properties.getGroupCn());
+            case "watch" -> List.of(properties.getGroupWatch());
             default -> Arrays.asList(input.split(","));
         };
     }
