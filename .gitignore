@@ -38,3 +38,9 @@ worktree-*/
 # loop-run-log.md
 target/
 data/
+
+# Agent tooling artifacts (indexes, caches, configs — regenerable, not runtime)
+.claude/
+.codebase-memory/
+graphify-out/
+CLAUDE.md
