@@ -9,6 +9,7 @@ import com.futu.openapi.pb.QotCommon.*;
 import com.futu.openapi.pb.QotRequestHistoryKL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -34,13 +35,16 @@ public class KLineService {
 
     private final FutuConnectionManager connectionManager;
     private final AsyncRequestBridge bridge;
+    private final long klineCacheTtlMinutes;
 
     private final Map<String, List<Double>> closePriceCache = new ConcurrentHashMap<>();
-    private final Map<String, List<KLineData>> klineCache = new ConcurrentHashMap<>();
+    private final Map<String, CachedKLines> klineCache = new ConcurrentHashMap<>();
 
-    public KLineService(FutuConnectionManager connectionManager, AsyncRequestBridge bridge) {
+    public KLineService(FutuConnectionManager connectionManager, AsyncRequestBridge bridge,
+                        @Value("${kline.cache-ttl-minutes:360}") long klineCacheTtlMinutes) {
         this.connectionManager = connectionManager;
         this.bridge = bridge;
+        this.klineCacheTtlMinutes = klineCacheTtlMinutes;
     }
 
     public List<Double> fetchDailyCloses(StockInfo stock) throws AsyncRequestBridge.FutuRequestException {
@@ -91,7 +95,7 @@ public class KLineService {
                     kl.getLowPrice(), kl.getClosePrice(), kl.getVolume(), kl.getChangeRate()));
         }
         String cacheKey = cacheKey(stock.key(), klTypeValue);
-        klineCache.put(cacheKey, klines);
+        klineCache.put(cacheKey, new CachedKLines(klines, System.currentTimeMillis()));
         closePriceCache.put(cacheKey, klines.stream().map(KLineData::close).toList());
         log.debug("Fetched {} {} klines for {}", klines.size(),
                 klTypeValue == KLType.KLType_Week_VALUE ? "weekly" : "daily", stock.key());
@@ -167,19 +171,36 @@ public class KLineService {
      * Returns empty list if cache miss and API call fails.
      */
     public List<KLineData> getOrFetchKLines(StockInfo stock) {
-        List<KLineData> cached = klineCache.get(stock.key());
-        if (cached != null && !cached.isEmpty()) {
-            log.debug("K-line cache hit for {}", stock.key());
-            return cached;
+        String key = stock.key();
+        CachedKLines cached = klineCache.get(key);
+        if (cached != null && !isExpired(cached)) {
+            log.debug("K-line cache hit for {}", key);
+            return cached.klines();
+        }
+        if (cached != null) {
+            log.debug("K-line cache expired for {} (ttl={}min), refetching", key, klineCacheTtlMinutes);
         }
         try {
             return fetchKLines(stock);
         } catch (AsyncRequestBridge.FutuRequestException e) {
-            log.warn("Failed to fetch K-lines for {}: {}", stock.key(), e.getMessage());
+            log.warn("Failed to fetch K-lines for {}: {}", key, e.getMessage());
             return List.of();
         }
     }
 
+    /** Drops cached K-lines for a stock so the next getOrFetchKLines refetches. */
+    public void invalidate(StockInfo stock) {
+        klineCache.remove(stock.key());
+    }
+
+    private boolean isExpired(CachedKLines entry) {
+        return klineCacheTtlMinutes > 0
+                && System.currentTimeMillis() - entry.fetchedAtMillis() > klineCacheTtlMinutes * 60_000L;
+    }
+
     public record KLineData(String time, double open, double high, double low, double close,
                             long volume, double changeRate) {}
+
+    /** Cached K-lines plus the epoch-millis timestamp they were fetched at. */
+    private record CachedKLines(List<KLineData> klines, long fetchedAtMillis) {}
 }

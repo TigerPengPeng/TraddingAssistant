@@ -24,7 +24,7 @@ class KLineServiceFreqTest {
     void setUp() throws Exception {
         FutuConnectionManager connMgr = mock(FutuConnectionManager.class);
         AsyncRequestBridge bridge = mock(AsyncRequestBridge.class);
-        service = new KLineService(connMgr, bridge);
+        service = new KLineService(connMgr, bridge, 360);
         Field f = KLineService.class.getDeclaredField("closePriceCache");
         f.setAccessible(true);
         closeCache = (Map<String, List<Double>>) f.get(service);
