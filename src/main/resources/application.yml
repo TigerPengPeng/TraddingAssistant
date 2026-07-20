@@ -32,20 +32,44 @@ ai:
   analysis:
     api:
       url: ${AI_ANALYSIS_API_URL:http://host.docker.internal:9000/api/analyze}
-
-deepseek:
-  api:
-    key: ${DEEPSEEK_API_KEY:}
-    url: ${DEEPSEEK_API_URL:https://api.deepseek.com/v1/chat/completions}
-    model: ${DEEPSEEK_MODEL:deepseek-chat}
-    timeout-ms: ${DEEPSEEK_TIMEOUT_MS:60000}
-    rate-limit-ms: ${DEEPSEEK_RATE_LIMIT_MS:500}
+  # Right-trend analysis LLM providers (OpenAI-compatible Chat Completions).
+  # Each provider carries its own label/api-key/api-url/model/json-mode/timeout.
+  # Only providers with a non-blank api-key are surfaced (see AiProviderProperties).
+  default-provider: ${AI_DEFAULT_PROVIDER:deepseek}
+  providers:
+    deepseek:
+      label: ${AI_DEEPSEEK_LABEL:DeepSeek}
+      # AI_DEEPSEEK_* takes priority; falls back to legacy DEEPSEEK_* for zero-change upgrades.
+      api-key: ${AI_DEEPSEEK_API_KEY:${DEEPSEEK_API_KEY:}}
+      api-url: ${AI_DEEPSEEK_API_URL:${DEEPSEEK_API_URL:https://api.deepseek.com/v1/chat/completions}}
+      model: ${AI_DEEPSEEK_MODEL:${DEEPSEEK_MODEL:deepseek-chat}}
+      json-mode: ${AI_DEEPSEEK_JSON_MODE:true}
+      timeout-ms: ${AI_DEEPSEEK_TIMEOUT_MS:${DEEPSEEK_TIMEOUT_MS:60000}}
+      rate-limit-ms: ${AI_DEEPSEEK_RATE_LIMIT_MS:${DEEPSEEK_RATE_LIMIT_MS:500}}
+    glm:
+      label: ${AI_GLM_LABEL:智谱GLM}
+      api-key: ${AI_GLM_API_KEY:}
+      api-url: ${AI_GLM_API_URL:https://open.bigmodel.cn/api/paas/v4/chat/completions}
+      model: ${AI_GLM_MODEL:glm-4.6}
+      json-mode: ${AI_GLM_JSON_MODE:true}
+    kimi:
+      label: ${AI_KIMI_LABEL:Kimi}
+      api-key: ${AI_KIMI_API_KEY:}
+      api-url: ${AI_KIMI_API_URL:https://api.moonshot.cn/v1/chat/completions}
+      model: ${AI_KIMI_MODEL:moonshot-v1-auto}
+      json-mode: ${AI_KIMI_JSON_MODE:true}
 
 right-trend:
   group-us: ${RIGHT_TREND_GROUP_US:US}
   group-hk: ${RIGHT_TREND_GROUP_HK:HK}
   group-cn: ${RIGHT_TREND_GROUP_CN:CN}
   kline-lookback: 60
+
+# In-memory K-line cache TTL (minutes). 0 disables expiry (legacy behavior).
+# Right-trend analysis always refetches via invalidate(); this TTL is a backstop
+# for other consumers that read cached closes.
+kline:
+  cache-ttl-minutes: ${KLINE_CACHE_TTL_MINUTES:360}
 
 futu:
   opend:

@@ -38,6 +38,10 @@ public class RightTrendAnalysisRecord {
     @Column(length = 4000)
     private String reason;
 
+    /** LLM provider id used for this analysis (deepseek/glm/kimi/...). */
+    @Column(length = 32)
+    private String provider;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -45,7 +49,8 @@ public class RightTrendAnalysisRecord {
 
     public RightTrendAnalysisRecord(String groupName, String stockKey, String stockName,
                                      String tradeDate, boolean isInRightTrend, String confidence,
-                                     String trendDirection, String keySignals, String reason) {
+                                     String trendDirection, String keySignals, String reason,
+                                     String provider) {
         this.groupName = groupName;
         this.stockKey = stockKey;
         this.stockName = stockName;
@@ -55,6 +60,7 @@ public class RightTrendAnalysisRecord {
         this.trendDirection = trendDirection;
         this.keySignals = keySignals;
         this.reason = reason;
+        this.provider = provider;
         this.createdAt = Instant.now();
     }
 
@@ -68,5 +74,6 @@ public class RightTrendAnalysisRecord {
     public String getTrendDirection() { return trendDirection; }
     public String getKeySignals() { return keySignals; }
     public String getReason() { return reason; }
+    public String getProvider() { return provider; }
     public Instant getCreatedAt() { return createdAt; }
 }

@@ -1,9 +1,12 @@
 package com.autotrading.web;
 
 import com.autotrading.config.RightTrendProperties;
+import com.autotrading.config.AiProviderProperties;
 import com.autotrading.monitor.RightTrendScheduler;
 import com.autotrading.market.RightTrendAnalysisService.RightTrendReport;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.util.*;
 
@@ -16,23 +19,56 @@ public class RightTrendController {
 
     private final RightTrendScheduler scheduler;
     private final RightTrendProperties properties;
+    private final AiProviderProperties aiProperties;
 
     public RightTrendController(RightTrendScheduler scheduler,
-                                  RightTrendProperties properties) {
+                                  RightTrendProperties properties,
+                                  AiProviderProperties aiProperties) {
         this.scheduler = scheduler;
         this.properties = properties;
+        this.aiProperties = aiProperties;
+    }
+
+    /**
+     * Lists configured LLM providers for the frontend model dropdown.
+     * Only providers with a non-blank api-key are returned.
+     */
+    @GetMapping("/models")
+    public Map<String, Object> models() {
+        List<Map<String, Object>> models = new ArrayList<>();
+        for (Map.Entry<String, AiProviderProperties.Provider> e : aiProperties.getConfiguredProviders()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getKey());
+            m.put("label", e.getValue().getLabel());
+            m.put("default", e.getKey().equals(aiProperties.getDefaultProvider()));
+            models.add(m);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("default", aiProperties.getDefaultProvider());
+        result.put("models", models);
+        return result;
     }
 
     @PostMapping("/analyze")
-    public Map<String, Object> analyze(
+    public ResponseEntity<Map<String, Object>> analyze(
             @RequestParam(defaultValue = "all") String groups,
-            @RequestParam(defaultValue = "false") boolean sendEmail) {
+            @RequestParam(defaultValue = "false") boolean sendEmail,
+            @RequestParam(required = false) String provider) {
+        // Reject an explicitly-requested but unconfigured provider with 400.
+        if (provider != null && !provider.isBlank() && !aiProperties.isConfigured(provider)) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("status", "error");
+            err.put("message", "未配置的模型: " + provider);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(err);
+        }
         List<String> groupNames = resolveGroups(groups);
-        RightTrendReport report = scheduler.runAnalysis(groupNames, sendEmail);
+        // Normalize blank to null so the scheduler resolves the default provider.
+        String providerId = (provider == null || provider.isBlank()) ? null : provider;
+        RightTrendReport report = scheduler.runAnalysis(groupNames, sendEmail, providerId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "ok");
         result.put("report", report);
-        return result;
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/latest")

@@ -243,7 +243,11 @@ public class NotificationTemplate {
         long inTrend = report.stocks().stream().filter(s -> s.isInRightTrend()).count();
 
         sb.append("<h2 style=\"color:#16a34a\">")
-          .append("右侧趋势分析报告 - ").append(report.date()).append(" ").append(groupLabel).append("</h2>");
+          .append("右侧趋势分析报告 - ").append(report.date()).append(" ").append(groupLabel);
+        if (report.providerLabel() != null && !report.providerLabel().isBlank()) {
+            sb.append(" <span style=\"color:#6b7280\">· ").append(report.providerLabel()).append("</span>");
+        }
+        sb.append("</h2>");
         sb.append("<p style=\"padding:12px 16px;background:#1a1a2e;border-radius:8px;color:#e6edf3;font-size:14px;margin-bottom:16px\">")
           .append("<strong>汇总: </strong>共分析 ").append(report.stocks().size())
           .append(" 只股票，其中 <span style=\"color:#16a34a;font-weight:700\">").append(inTrend)

@@ -1,6 +1,7 @@
 package com.autotrading.monitor;
 
 import com.autotrading.config.RightTrendProperties;
+import com.autotrading.config.AiProviderProperties;
 import com.autotrading.market.RightTrendAnalysisService;
 import com.autotrading.market.RightTrendAnalysisService.RightTrendReport;
 import com.autotrading.notification.EmailNotificationService;
@@ -27,34 +28,39 @@ public class RightTrendScheduler {
     private final RightTrendAnalysisService analysisService;
     private final EmailNotificationService emailService;
     private final RightTrendProperties properties;
+    private final AiProviderProperties aiProperties;
     private final LinkedList<RightTrendReport> history = new LinkedList<>();
 
     public RightTrendScheduler(RightTrendAnalysisService analysisService,
                                 EmailNotificationService emailService,
-                                RightTrendProperties properties) {
+                                RightTrendProperties properties,
+                                AiProviderProperties aiProperties) {
         this.analysisService = analysisService;
         this.emailService = emailService;
         this.properties = properties;
+        this.aiProperties = aiProperties;
     }
 
     @Scheduled(cron = "0 0 9 * * MON-FRI", zone = "Asia/Shanghai")
     public void analyzeUS() {
         log.info("Scheduled right-trend analysis: US stocks at 09:00");
-        runAnalysis(List.of(properties.getGroupUs()), true);
+        runAnalysis(List.of(properties.getGroupUs()), true, aiProperties.getDefaultProvider());
     }
 
     @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Shanghai")
     public void analyzeHKAndCN() {
         log.info("Scheduled right-trend analysis: HK + CN stocks at 17:00");
-        runAnalysis(List.of(properties.getGroupHk(), properties.getGroupCn()), true);
+        runAnalysis(List.of(properties.getGroupHk(), properties.getGroupCn()), true,
+                aiProperties.getDefaultProvider());
     }
 
     /**
-     * Manual trigger (from API). Returns the generated report.
+    * Manual trigger (from API). Returns the generated report.
+     * providerId may be null (use default) or an explicit configured provider id.
      */
-    public RightTrendReport runAnalysis(List<String> groupNames, boolean sendEmail) {
-        log.info("Starting right-trend analysis for groups: {}", groupNames);
-        RightTrendReport report = analysisService.analyzeGroups(groupNames);
+    public RightTrendReport runAnalysis(List<String> groupNames, boolean sendEmail, String providerId) {
+        log.info("Starting right-trend analysis for groups: {} (provider={})", groupNames, providerId);
+        RightTrendReport report = analysisService.analyzeGroups(groupNames, providerId);
         storeReport(report);
 
         if (sendEmail) {

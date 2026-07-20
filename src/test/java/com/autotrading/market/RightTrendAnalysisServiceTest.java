@@ -1,10 +1,10 @@
 package com.autotrading.market;
 
 import com.autotrading.account.StockGroupService;
-import com.autotrading.config.DeepSeekProperties;
+import com.autotrading.config.AiProviderProperties;
 import com.autotrading.config.RightTrendProperties;
 import com.autotrading.futu.AsyncRequestBridge;
-import com.autotrading.market.DeepSeekClient.DeepSeekAnalysis;
+import com.autotrading.market.LlmAnalysisClient.LlmAnalysis;
 import com.autotrading.market.RightTrendAnalysisService.RightTrendReport;
 import com.autotrading.market.RightTrendAnalysisService.StockTrendResult;
 import com.autotrading.model.StockInfo;
@@ -24,8 +24,8 @@ class RightTrendAnalysisServiceTest {
 
     private StockGroupService stockGroupService;
     private KLineService kLineService;
-    private DeepSeekClient deepSeekClient;
-    private DeepSeekProperties deepSeekProps;
+    private LlmAnalysisClient llmClient;
+    private AiProviderProperties aiProps;
     private RightTrendProperties rightTrendProps;
     private RightTrendAnalysisRecordRepository repository;
     private RightTrendAnalysisService service;
@@ -34,16 +34,21 @@ class RightTrendAnalysisServiceTest {
     void setUp() throws Exception {
         stockGroupService = mock(StockGroupService.class);
         kLineService = mock(KLineService.class);
-        deepSeekClient = mock(DeepSeekClient.class);
-        deepSeekProps = new DeepSeekProperties();
-        deepSeekProps.getApi().setRateLimitMs(0); // no delay in tests
+        llmClient = mock(LlmAnalysisClient.class);
+        aiProps = new AiProviderProperties();
+        // Configure a single provider with no rate limit so tests run fast.
+        AiProviderProperties.Provider deepseek = new AiProviderProperties.Provider();
+        deepseek.setLabel("DeepSeek");
+        deepseek.setApiKey("test-key");
+        deepseek.setRateLimitMs(0);
+        aiProps.getProviders().put("deepseek", deepseek);
         rightTrendProps = new RightTrendProperties();
         rightTrendProps.setKlineLookback(60);
         repository = mock(RightTrendAnalysisRecordRepository.class);
 
         service = new RightTrendAnalysisService(
-                stockGroupService, kLineService, deepSeekClient,
-                deepSeekProps, rightTrendProps, repository);
+                stockGroupService, kLineService, llmClient,
+                aiProps, rightTrendProps, repository);
     }
 
     private List<KLineService.KLineData> sampleKLines() {
@@ -58,8 +63,8 @@ class RightTrendAnalysisServiceTest {
 
         when(stockGroupService.getStocksInGroup("港股")).thenReturn(List.of(stock1, stock2));
         when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
-        when(deepSeekClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList()))
-                .thenReturn(new DeepSeekAnalysis(true, true, "high", "up",
+        when(llmClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList(), any()))
+                .thenReturn(new LlmAnalysis(true, true, "high", "up",
                         List.of("突破MA30"), "confirmed uptrend", null));
 
         RightTrendReport report = service.analyzeGroup("港股");
@@ -77,10 +82,10 @@ class RightTrendAnalysisServiceTest {
 
         when(stockGroupService.getStocksInGroup("美股")).thenReturn(List.of(stock1, stock2));
         when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
-        when(deepSeekClient.analyzeRightTrend(eq("Apple"), anyString(), anyString(), anyList()))
-                .thenReturn(DeepSeekAnalysis.failed("API timeout"));
-        when(deepSeekClient.analyzeRightTrend(eq("Microsoft"), anyString(), anyString(), anyList()))
-                .thenReturn(new DeepSeekAnalysis(true, true, "medium", "up",
+        when(llmClient.analyzeRightTrend(eq("Apple"), anyString(), anyString(), anyList(), any()))
+                .thenReturn(LlmAnalysis.failed("API timeout"));
+        when(llmClient.analyzeRightTrend(eq("Microsoft"), anyString(), anyString(), anyList(), any()))
+                .thenReturn(new LlmAnalysis(true, true, "medium", "up",
                         List.of("higher lows"), "trending up", null));
 
         RightTrendReport report = service.analyzeGroup("美股");
@@ -114,6 +119,6 @@ class RightTrendAnalysisServiceTest {
 
         assertEquals(1, report.stocks().size());
         assertFalse(report.stocks().get(0).success());
-        verifyNoInteractions(deepSeekClient);
+        verifyNoInteractions(llmClient);
     }
 }

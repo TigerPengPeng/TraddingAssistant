@@ -1,6 +1,6 @@
 package com.autotrading.market;
 
-import com.autotrading.config.DeepSeekProperties;
+import com.autotrading.config.AiProviderProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -16,13 +16,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Low-level client for DeepSeek Chat Completions API.
- * Sends K-line data and asks the model to assess whether a stock has entered a right-side trend.
+ * LLM client for right-side trend analysis. Works with any OpenAI-compatible
+ * Chat Completions endpoint (DeepSeek, GLM, Kimi/Moonshot, ...). The provider
+ * (url/key/model/json-mode) is chosen per call via AiProviderProperties.
  */
 @Service
-public class DeepSeekClient {
+public class LlmAnalysisClient {
 
-    private static final Logger log = LoggerFactory.getLogger(DeepSeekClient.class);
+    private static final Logger log = LoggerFactory.getLogger(LlmAnalysisClient.class);
 
     private static final String SYSTEM_PROMPT = """
             你是一位专业的股票趋势分析师，擅长通过K线数据判断股票是否进入"右侧趋势"。
@@ -31,33 +32,45 @@ public class DeepSeekClient {
             仅处于反弹但尚未确认趋势反转的，不应判定为进入右侧趋势。
             请以JSON格式返回分析结果。""";
 
-    private final DeepSeekProperties properties;
-    RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
+    private final AiProviderProperties properties;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public DeepSeekClient(DeepSeekProperties properties) {
+    // Package-private for test injection.
+    RestTemplate restTemplate;
+
+    public LlmAnalysisClient(AiProviderProperties properties) {
         this.properties = properties;
-        this.objectMapper = new ObjectMapper();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.getApi().getTimeoutMs());
-        factory.setReadTimeout(properties.getApi().getTimeoutMs());
+        int timeout = resolveDefaultTimeoutMs(properties);
+        factory.setConnectTimeout(timeout);
+        factory.setReadTimeout(timeout);
         this.restTemplate = new RestTemplate(factory);
     }
 
+    private int resolveDefaultTimeoutMs(AiProviderProperties props) {
+        AiProviderProperties.Resolved resolved = props.resolve(props.getDefaultProvider());
+        if (resolved != null && resolved.provider().getTimeoutMs() > 0) {
+            return resolved.provider().getTimeoutMs();
+        }
+        return 60000;
+    }
+
     /**
-     * Analyzes a single stock for right-side trend entry.
+     * Analyzes a single stock for right-side trend entry using the given provider.
      *
      * @param stockName  display name
      * @param stockKey   market.code key
      * @param marketLabel human-readable market (美股/港股/A股)
-     * @param klines     K-line data (most recent 60 bars)
-     * @return DeepSeekAnalysis result
+     * @param klines     K-line data (most recent bars)
+     * @param provider   resolved LLM provider (url/key/model/json-mode)
+     * @return LlmAnalysis result
      */
-    public DeepSeekAnalysis analyzeRightTrend(String stockName, String stockKey,
-                                                String marketLabel,
-                                                List<KLineService.KLineData> klines) {
+    public LlmAnalysis analyzeRightTrend(String stockName, String stockKey,
+                                          String marketLabel,
+                                          List<KLineService.KLineData> klines,
+                                          AiProviderProperties.Provider provider) {
         if (klines.isEmpty()) {
-            return DeepSeekAnalysis.failed("No K-line data available");
+            return LlmAnalysis.failed("No K-line data available");
         }
 
         String userMessage = buildUserMessage(stockName, stockKey, marketLabel, klines);
@@ -65,22 +78,26 @@ public class DeepSeekClient {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(properties.getApi().getKey());
+            headers.setBearerAuth(provider.getApiKey());
 
             Map<String, Object> requestBody = new LinkedHashMap<>();
-            requestBody.put("model", properties.getApi().getModel());
+            requestBody.put("model", provider.getModel());
             requestBody.put("messages", List.of(
                     Map.of("role", "system", "content", SYSTEM_PROMPT),
                     Map.of("role", "user", "content", userMessage)
             ));
-            requestBody.put("response_format", Map.of("type", "json_object"));
+            // Only send response_format when the provider supports JSON mode
+            // (some endpoints, e.g. early Moonshot, reject the field).
+            if (provider.isJsonMode()) {
+                requestBody.put("response_format", Map.of("type", "json_object"));
+            }
             requestBody.put("temperature", 0.1);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            log.info("Calling DeepSeek for {} ({})", stockName, stockKey);
+            log.info("Calling LLM [{}] for {} ({})", provider.getModel(), stockName, stockKey);
             ResponseEntity<String> response = restTemplate.exchange(
-                    properties.getApi().getUrl(),
+                    provider.getApiUrl(),
                     HttpMethod.POST,
                     entity,
                     String.class
@@ -89,11 +106,11 @@ public class DeepSeekClient {
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 return parseResponse(response.getBody(), stockKey);
             } else {
-                return DeepSeekAnalysis.failed("API returned status: " + response.getStatusCode());
+                return LlmAnalysis.failed("API returned status: " + response.getStatusCode());
             }
         } catch (Exception e) {
-            log.error("DeepSeek analysis failed for {}: {}", stockKey, e.getMessage());
-            return DeepSeekAnalysis.failed("DeepSeek API error: " + e.getMessage());
+            log.error("LLM analysis failed for {}: {}", stockKey, e.getMessage());
+            return LlmAnalysis.failed("LLM API error: " + e.getMessage());
         }
     }
 
@@ -123,16 +140,16 @@ public class DeepSeekClient {
         return sb.toString();
     }
 
-    private DeepSeekAnalysis parseResponse(String body, String stockKey) {
+    private LlmAnalysis parseResponse(String body, String stockKey) {
         try {
             JsonNode root = objectMapper.readTree(body);
             JsonNode choices = root.path("choices");
             if (!choices.isArray() || choices.isEmpty()) {
-                return DeepSeekAnalysis.failed("No choices in response");
+                return LlmAnalysis.failed("No choices in response");
             }
 
             String content = choices.get(0).path("message").path("content").asText();
-            JsonNode analysis = objectMapper.readTree(content);
+            JsonNode analysis = objectMapper.readTree(extractJson(content));
 
             boolean isInRightTrend = analysis.path("isInRightTrend").asBoolean(false);
             String confidence = analysis.path("confidence").asText("low");
@@ -147,21 +164,51 @@ public class DeepSeekClient {
                 }
             }
 
-            return new DeepSeekAnalysis(true, isInRightTrend, confidence, trendDirection,
+            return new LlmAnalysis(true, isInRightTrend, confidence, trendDirection,
                     keySignals, reason, null);
         } catch (Exception e) {
-            log.error("Failed to parse DeepSeek response for {}: {}", stockKey, e.getMessage());
-            return DeepSeekAnalysis.failed("Failed to parse response: " + e.getMessage());
+            log.error("Failed to parse LLM response for {}: {}", stockKey, e.getMessage());
+            return LlmAnalysis.failed("Failed to parse response: " + e.getMessage());
         }
     }
 
-    /** Result of a single DeepSeek analysis. */
-    public record DeepSeekAnalysis(boolean success, boolean isInRightTrend, String confidence,
-                                    String trendDirection, List<String> keySignals,
-                                    String reason, String error) {
+    /**
+     * Extracts a JSON object from possibly-fenced or prose-wrapped model output.
+     * Handles ```json ... ```, ``` ... ```, and raw text with surrounding prose.
+     */
+    static String extractJson(String content) {
+        if (content == null || content.isBlank()) {
+            return "{}";
+        }
+        String s = content.trim();
+        // Strip a single layer of ```...``` or ```json...``` fences.
+        if (s.startsWith("```")) {
+            int firstNewline = s.indexOf('\n');
+            if (firstNewline > 0) {
+                s = s.substring(firstNewline + 1);
+            }
+            int lastFence = s.lastIndexOf("```");
+            if (lastFence >= 0) {
+                s = s.substring(0, lastFence);
+            }
+            s = s.trim();
+        }
+        // Slice to the outermost JSON object as a fallback.
+        int start = s.indexOf('{');
+        int end = s.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return s.substring(start, end + 1);
+        }
+        return s;
+    }
 
-        static DeepSeekAnalysis failed(String error) {
-            return new DeepSeekAnalysis(false, false, "low", "unknown",
+    /** Result of a single LLM analysis. */
+    public record LlmAnalysis(boolean success, boolean isInRightTrend, String confidence,
+                                String trendDirection, List<String> keySignals,
+                                String reason, String error) {
+
+        static LlmAnalysis failed(String error) {
+            return new LlmAnalysis(false, false, "low", "unknown",
                     List.of(), "", error);
         }
     }

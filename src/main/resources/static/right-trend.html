@@ -154,7 +154,10 @@
 <div class="header">
   <h1>右侧趋势分析</h1>
   <div style="display:flex;gap:12px;align-items:center">
-    <a href="/" class="btn">返回主页</a>
+  <a href="/" class="btn">返回主页</a>
+    <select id="model-select" title="选择本次分析所用的大模型" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:13px">
+      <option value="">模型加载中…</option>
+    </select>
     <select id="group-select" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:13px">
       <option value="us">美股</option>
       <option value="hk_cn" selected>港股+沪深</option>
@@ -237,14 +240,21 @@ async function analyze() {
   var btn = document.getElementById('analyze-btn');
   var groups = document.getElementById('group-select').value;
   var sendEmail = document.getElementById('send-email').checked;
+  var provider = document.getElementById('model-select').value;
+  var providerLabel = (document.getElementById('model-select').selectedOptions[0] || {}).text || provider;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> 分析中';
   document.getElementById('report-container').innerHTML =
-    '<div class="empty-state">正在调用 DeepSeek 逐只分析，请稍候（约 1-3 分钟）...</div>';
+    '<div class="empty-state">正在调用「' + providerLabel + '」逐只分析，请稍候（约 1-3 分钟）...</div>';
   try {
-    const resp = await fetch('/api/right-trend/analyze?groups=' + encodeURIComponent(groups) + '&sendEmail=' + sendEmail, { method: 'POST' });
+    const resp = await fetch('/api/right-trend/analyze?groups=' + encodeURIComponent(groups)
+        + '&sendEmail=' + sendEmail + '&provider=' + encodeURIComponent(provider), { method: 'POST' });
     const d = await resp.json();
     if (d.status === 'ok') renderReport(d.report);
+    else if (d.status === 'error') {
+      document.getElementById('report-container').innerHTML =
+        '<div class="empty-state">' + (d.message || '分析失败') + '</div>';
+    }
     btn.textContent = 'Done';
   } catch(e) {
     btn.textContent = 'Error';
@@ -262,7 +272,7 @@ function renderReport(report) {
 
   var html = '<div class="summary-box">' +
     '<div>' +
-      '<div class="meta">' + (report.groupNames || []).join(' + ') + ' &middot; ' + report.date + '</div>' +
+      '<div class="meta">' + (report.providerLabel ? report.providerLabel + ' · ' : '') + (report.groupNames || []).join(' + ') + ' &middot; ' + report.date + '</div>' +
       '<div style="margin-top:4px">' +
         '<span class="count green">' + inTrend.length + '</span> <span style="color:var(--text-dim)">已进入右侧</span>' +
         ' &nbsp;/&nbsp; <span class="count">' + stocks.length + '</span> <span style="color:var(--text-dim)">只股票</span>' +
@@ -317,8 +327,35 @@ function renderReport(report) {
   document.getElementById('report-container').innerHTML = html;
 }
 
+async function loadModels() {
+  try {
+    const resp = await fetch('/api/right-trend/models');
+    const d = await resp.json();
+    var sel = document.getElementById('model-select');
+    sel.innerHTML = '';
+    var list = d.models || [];
+    if (list.length === 0) {
+      var opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '未配置模型';
+      sel.appendChild(opt);
+      return;
+    }
+    list.forEach(function(m) {
+      var opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label || m.id;
+      sel.appendChild(opt);
+    });
+    sel.value = d.default || list[0].id;
+  } catch(e) {
+    // keep "模型加载中…" on failure
+  }
+}
+
 loadLatest();
 loadHistoryList();
+loadModels();
 </script>
 
 </body>

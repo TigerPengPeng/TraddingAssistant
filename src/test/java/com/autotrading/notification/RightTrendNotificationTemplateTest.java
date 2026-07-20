@@ -24,7 +24,7 @@ class RightTrendNotificationTemplateTest {
         );
 
         RightTrendReport report = new RightTrendReport("2025-07-13",
-                List.of("港股"), stocks, System.currentTimeMillis());
+                List.of("港股"), stocks, System.currentTimeMillis(), "deepseek", "DeepSeek");
 
         String html = NotificationTemplate.rightTrendBody(report);
 
@@ -44,7 +44,7 @@ class RightTrendNotificationTemplateTest {
     @DisplayName("Handles empty results gracefully")
     void handlesEmptyResults() {
         RightTrendReport report = new RightTrendReport("2025-07-13",
-                List.of("美股"), List.of(), System.currentTimeMillis());
+                List.of("美股"), List.of(), System.currentTimeMillis(), "deepseek", "DeepSeek");
 
         String html = NotificationTemplate.rightTrendBody(report);
 
@@ -61,7 +61,7 @@ class RightTrendNotificationTemplateTest {
         );
 
         RightTrendReport report = new RightTrendReport("2025-07-13",
-                List.of("美股"), stocks, System.currentTimeMillis());
+                List.of("美股"), stocks, System.currentTimeMillis(), "deepseek", "DeepSeek");
 
         String html = NotificationTemplate.rightTrendBody(report);
 
