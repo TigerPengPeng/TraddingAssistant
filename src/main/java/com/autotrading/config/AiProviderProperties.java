@@ -72,6 +72,9 @@ public class AiProviderProperties {
         private boolean jsonMode = true;
         private int timeoutMs = 60000;
         private long rateLimitMs = 500;
+        // Optional User-Agent header. Some providers (e.g. Kimi /coding endpoint)
+        // require a specific UA to identify the client type.
+        private String userAgent = "";
 
         public String getLabel() { return label; }
         public void setLabel(String label) { this.label = label; }
@@ -87,5 +90,7 @@ public class AiProviderProperties {
         public void setTimeoutMs(int timeoutMs) { this.timeoutMs = timeoutMs; }
         public long getRateLimitMs() { return rateLimitMs; }
         public void setRateLimitMs(long rateLimitMs) { this.rateLimitMs = rateLimitMs; }
+        public String getUserAgent() { return userAgent; }
+        public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
     }
 }

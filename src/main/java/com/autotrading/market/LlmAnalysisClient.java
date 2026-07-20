@@ -79,6 +79,11 @@ public class LlmAnalysisClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(provider.getApiKey());
+            // Some providers (Kimi /coding endpoint) require a specific User-Agent
+            // to identify the client type. Only set when non-blank.
+            if (provider.getUserAgent() != null && !provider.getUserAgent().isBlank()) {
+                headers.set(HttpHeaders.USER_AGENT, provider.getUserAgent());
+            }
 
             Map<String, Object> requestBody = new LinkedHashMap<>();
             requestBody.put("model", provider.getModel());

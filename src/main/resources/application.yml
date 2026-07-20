@@ -46,18 +46,13 @@ ai:
       json-mode: ${AI_DEEPSEEK_JSON_MODE:true}
       timeout-ms: ${AI_DEEPSEEK_TIMEOUT_MS:${DEEPSEEK_TIMEOUT_MS:60000}}
       rate-limit-ms: ${AI_DEEPSEEK_RATE_LIMIT_MS:${DEEPSEEK_RATE_LIMIT_MS:500}}
-    glm:
-      label: ${AI_GLM_LABEL:智谱GLM}
-      api-key: ${AI_GLM_API_KEY:}
-      api-url: ${AI_GLM_API_URL:https://open.bigmodel.cn/api/paas/v4/chat/completions}
-      model: ${AI_GLM_MODEL:glm-4.6}
-      json-mode: ${AI_GLM_JSON_MODE:true}
     kimi:
       label: ${AI_KIMI_LABEL:Kimi}
       api-key: ${AI_KIMI_API_KEY:}
-      api-url: ${AI_KIMI_API_URL:https://api.moonshot.cn/v1/chat/completions}
-      model: ${AI_KIMI_MODEL:moonshot-v1-auto}
+      api-url: ${AI_KIMI_API_URL:https://api.kimi.com/coding/v1/chat/completions}
+      model: ${AI_KIMI_MODEL:kimi-k3}
       json-mode: ${AI_KIMI_JSON_MODE:true}
+      user-agent: ${AI_KIMI_USER_AGENT:claude-code/0.1.0}
 
 right-trend:
   group-us: ${RIGHT_TREND_GROUP_US:US}
