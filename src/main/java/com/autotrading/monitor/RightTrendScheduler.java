@@ -1,7 +1,6 @@
 package com.autotrading.monitor;
 
 import com.autotrading.config.RightTrendProperties;
-import com.autotrading.config.AiProviderProperties;
 import com.autotrading.market.RightTrendAnalysisService;
 import com.autotrading.market.RightTrendAnalysisService.RightTrendReport;
 import com.autotrading.notification.EmailNotificationService;
@@ -28,31 +27,28 @@ public class RightTrendScheduler {
     private final RightTrendAnalysisService analysisService;
     private final EmailNotificationService emailService;
     private final RightTrendProperties properties;
-    private final AiProviderProperties aiProperties;
     private final LinkedList<RightTrendReport> history = new LinkedList<>();
 
     public RightTrendScheduler(RightTrendAnalysisService analysisService,
                                 EmailNotificationService emailService,
-                                RightTrendProperties properties,
-                                AiProviderProperties aiProperties) {
+                                RightTrendProperties properties) {
         this.analysisService = analysisService;
         this.emailService = emailService;
         this.properties = properties;
-        this.aiProperties = aiProperties;
     }
 
-    @Scheduled(cron = "0 0 9 * * MON-FRI", zone = "Asia/Shanghai")
-    public void analyzeUS() {
-        log.info("Scheduled right-trend analysis: US stocks at 09:00");
-        runAnalysis(List.of(properties.getGroupUs()), true, aiProperties.getDefaultProvider());
-    }
+   @Scheduled(cron = "0 0 9 * * MON-FRI", zone = "Asia/Shanghai")
+   public void analyzeUS() {
+       log.info("Scheduled right-trend analysis: US stocks at 09:00");
+        runAnalysis(List.of(properties.getGroupUs()), true, properties.getScheduledProvider());
+   }
 
-    @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Shanghai")
-    public void analyzeHKAndCN() {
-        log.info("Scheduled right-trend analysis: HK + CN stocks at 17:00");
-        runAnalysis(List.of(properties.getGroupHk(), properties.getGroupCn()), true,
-                aiProperties.getDefaultProvider());
-    }
+   @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Shanghai")
+   public void analyzeHKAndCN() {
+       log.info("Scheduled right-trend analysis: HK + CN stocks at 17:00");
+       runAnalysis(List.of(properties.getGroupHk(), properties.getGroupCn()), true,
+                properties.getScheduledProvider());
+   }
 
     /**
     * Manual trigger (from API). Returns the generated report.

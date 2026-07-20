@@ -75,6 +75,10 @@ public class AiProviderProperties {
         // Optional User-Agent header. Some providers (e.g. Kimi /coding endpoint)
         // require a specific UA to identify the client type.
         private String userAgent = "";
+       // Sampling temperature. null = do not send (use server default); some
+       // reasoning models (kimi-k3) reject any value other than 1, so omitting
+       // is the safe default for those.
+        private Double temperature = null;
 
         public String getLabel() { return label; }
         public void setLabel(String label) { this.label = label; }
@@ -92,5 +96,7 @@ public class AiProviderProperties {
         public void setRateLimitMs(long rateLimitMs) { this.rateLimitMs = rateLimitMs; }
         public String getUserAgent() { return userAgent; }
         public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
+        public Double getTemperature() { return temperature; }
+        public void setTemperature(Double temperature) { this.temperature = temperature; }
     }
 }

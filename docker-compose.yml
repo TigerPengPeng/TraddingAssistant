@@ -42,12 +42,15 @@ services:
       AI_KIMI_API_KEY: ${AI_KIMI_API_KEY:-}
       AI_KIMI_API_URL: ${AI_KIMI_API_URL:-https://api.kimi.com/coding/v1/chat/completions}
       AI_KIMI_MODEL: ${AI_KIMI_MODEL:-kimi-k3}
+      AI_KIMI_TIMEOUT_MS: ${AI_KIMI_TIMEOUT_MS:-180000}
       AI_KIMI_USER_AGENT: ${AI_KIMI_USER_AGENT:-claude-code/0.1.0}
       # Reconnect
       RECONNECT_INITIAL_DELAY_MS: ${RECONNECT_INITIAL_DELAY_MS:-5000}
       RECONNECT_MAX_DELAY_MS: ${RECONNECT_MAX_DELAY_MS:-60000}
       # Database
       DB_PATH: /app/data/autotrading
+      # Provider for the daily scheduled right-trend jobs (default deepseek).
+      RIGHT_TREND_SCHEDULED_PROVIDER: ${RIGHT_TREND_SCHEDULED_PROVIDER:-deepseek}
     ports:
       - "8080:8080"
     volumes:

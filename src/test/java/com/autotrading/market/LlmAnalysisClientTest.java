@@ -191,6 +191,53 @@ class LlmAnalysisClientTest {
     }
 
     @Test
+    @DisplayName("Omits temperature when provider.temperature is null (kimi-k3 only accepts 1)")
+    void omitsTemperatureWhenNull() throws Exception {
+        String content = objectMapper.writeValueAsString(Map.of(
+                "isInRightTrend", true, "confidence", "high", "trendDirection", "up",
+                "keySignals", List.of(), "reason", "ok"
+        ));
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(buildApiResponse(content), HttpStatus.OK));
+
+        // kimi provider in setUp() never sets temperature -> defaults to null.
+        client.analyzeRightTrend("T", "2.T", "港股", sampleKLines(60), clientProvider("kimi"));
+
+        ArgumentCaptor<HttpEntity<?>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(anyString(), eq(HttpMethod.POST), captor.capture(), eq(String.class));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = (Map<String, Object>) captor.getValue().getBody();
+        assertNull(body.get("temperature"),
+                "temperature must be omitted so kimi-k3 (which only accepts 1) does not 400");
+    }
+
+    @Test
+    @DisplayName("Applies the provider's timeout-ms to the HTTP client per call")
+    void appliesProviderTimeout() throws Exception {
+        String content = objectMapper.writeValueAsString(Map.of(
+                "isInRightTrend", true, "confidence", "high", "trendDirection", "up",
+                "keySignals", List.of(), "reason", "ok"
+        ));
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(buildApiResponse(content), HttpStatus.OK));
+
+        AiProviderProperties.Provider kimi = clientProvider("kimi");
+        kimi.setTimeoutMs(180000);
+        client.analyzeRightTrend("T", "2.T", "港股", sampleKLines(60), kimi);
+
+        // SimpleClientHttpRequestFactory has no getters, so reflect to verify
+        // the per-call timeout was applied. Guards the kimi 60s-timeout fix.
+        java.lang.reflect.Field rf = client.requestFactory.getClass().getDeclaredField("readTimeout");
+        rf.setAccessible(true);
+        java.lang.reflect.Field cf = client.requestFactory.getClass().getDeclaredField("connectTimeout");
+        cf.setAccessible(true);
+        assertEquals(180000, (int) rf.get(client.requestFactory),
+                "factory read timeout must reflect the provider's timeout-ms");
+        assertEquals(180000, (int) cf.get(client.requestFactory),
+                "factory connect timeout must reflect the provider's timeout-ms");
+    }
+
+    @Test
     @DisplayName("Handles HTTP error gracefully")
     void handlesHttpError() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))

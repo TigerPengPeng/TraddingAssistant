@@ -46,19 +46,26 @@ ai:
       json-mode: ${AI_DEEPSEEK_JSON_MODE:true}
       timeout-ms: ${AI_DEEPSEEK_TIMEOUT_MS:${DEEPSEEK_TIMEOUT_MS:60000}}
       rate-limit-ms: ${AI_DEEPSEEK_RATE_LIMIT_MS:${DEEPSEEK_RATE_LIMIT_MS:500}}
+      temperature: ${AI_DEEPSEEK_TEMPERATURE:0.1}
     kimi:
       label: ${AI_KIMI_LABEL:Kimi}
       api-key: ${AI_KIMI_API_KEY:}
       api-url: ${AI_KIMI_API_URL:https://api.kimi.com/coding/v1/chat/completions}
       model: ${AI_KIMI_MODEL:kimi-k3}
       json-mode: ${AI_KIMI_JSON_MODE:true}
+      timeout-ms: ${AI_KIMI_TIMEOUT_MS:180000}
       user-agent: ${AI_KIMI_USER_AGENT:claude-code/0.1.0}
+      # temperature deliberately unset: kimi-k3 rejects any value other than 1,
+      # so we omit the field and let the server apply its default.
 
 right-trend:
   group-us: ${RIGHT_TREND_GROUP_US:US}
   group-hk: ${RIGHT_TREND_GROUP_HK:HK}
   group-cn: ${RIGHT_TREND_GROUP_CN:CN}
   kline-lookback: 60
+  # Provider for the daily scheduled jobs (09:00 US, 17:00 HK+CN).
+  # Decoupled from ai.default-provider so the frontend default can change freely.
+  scheduled-provider: ${RIGHT_TREND_SCHEDULED_PROVIDER:deepseek}
 
 # In-memory K-line cache TTL (minutes). 0 disables expiry (legacy behavior).
 # Right-trend analysis always refetches via invalidate(); this TTL is a backstop

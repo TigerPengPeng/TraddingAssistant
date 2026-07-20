@@ -37,6 +37,8 @@ public class LlmAnalysisClient {
 
     // Package-private for test injection.
     RestTemplate restTemplate;
+    // Held so per-call timeouts can be applied without rebuilding the client.
+    final SimpleClientHttpRequestFactory requestFactory;
 
     public LlmAnalysisClient(AiProviderProperties properties) {
         this.properties = properties;
@@ -45,6 +47,7 @@ public class LlmAnalysisClient {
         factory.setConnectTimeout(timeout);
         factory.setReadTimeout(timeout);
         this.restTemplate = new RestTemplate(factory);
+        this.requestFactory = factory;
     }
 
     private int resolveDefaultTimeoutMs(AiProviderProperties props) {
@@ -69,8 +72,16 @@ public class LlmAnalysisClient {
                                           String marketLabel,
                                           List<KLineService.KLineData> klines,
                                           AiProviderProperties.Provider provider) {
-        if (klines.isEmpty()) {
-            return LlmAnalysis.failed("No K-line data available");
+       if (klines.isEmpty()) {
+           return LlmAnalysis.failed("No K-line data available");
+       }
+
+        // Apply this provider's timeout for the upcoming call. Reasoning models
+        // (kimi-k3) regularly exceed the default 60s, so the client must honor
+        // each provider's timeout-ms rather than a single global value.
+        if (provider.getTimeoutMs() > 0) {
+            requestFactory.setConnectTimeout(provider.getTimeoutMs());
+            requestFactory.setReadTimeout(provider.getTimeoutMs());
         }
 
         String userMessage = buildUserMessage(stockName, stockKey, marketLabel, klines);
@@ -96,7 +107,12 @@ public class LlmAnalysisClient {
             if (provider.isJsonMode()) {
                 requestBody.put("response_format", Map.of("type", "json_object"));
             }
-            requestBody.put("temperature", 0.1);
+            // Temperature is optional: some reasoning models (kimi-k3) reject any
+            // value other than 1, so a provider with temperature=null omits the
+            // field entirely and lets the server use its default.
+            if (provider.getTemperature() != null) {
+                requestBody.put("temperature", provider.getTemperature());
+            }
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
