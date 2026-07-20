@@ -39,11 +39,19 @@ public class StockGroupService {
     /**
      * Fetches all user stock group names.
      */
-    public List<String> getGroupNames() throws AsyncRequestBridge.FutuRequestException {
-        FTAPI_Conn_Qot conn = connectionManager.getConnQot();
-        if (conn == null) {
-            throw new AsyncRequestBridge.FutuRequestException("Not connected to OpenD");
-        }
+   public List<String> getGroupNames() throws AsyncRequestBridge.FutuRequestException {
+       return getGroups().stream().map(GroupInfo::name).toList();
+   }
+
+   /**
+    * Fetches all user stock groups with their type (Custom vs System).
+    * Needed because modifyUserSecurity rejects System groups.
+    */
+   public List<GroupInfo> getGroups() throws AsyncRequestBridge.FutuRequestException {
+       FTAPI_Conn_Qot conn = connectionManager.getConnQot();
+       if (conn == null) {
+           throw new AsyncRequestBridge.FutuRequestException("Not connected to OpenD");
+       }
 
         QotGetUserSecurityGroup.Request request = QotGetUserSecurityGroup.Request.newBuilder()
                 .setC2S(QotGetUserSecurityGroup.C2S.newBuilder()
@@ -58,18 +66,23 @@ public class StockGroupService {
             throw new AsyncRequestBridge.FutuRequestException("GetUserSecurityGroup failed: " + response.getRetMsg());
         }
 
-        List<String> names = new ArrayList<>();
-        for (QotGetUserSecurityGroup.GroupData group : response.getS2C().getGroupListList()) {
-            names.add(group.getGroupName());
-        }
-        log.info("Found {} stock groups: {}", names.size(), names);
-        return names;
-    }
+       List<String> names = new ArrayList<>();
+       List<GroupInfo> groups = new ArrayList<>();
+       for (QotGetUserSecurityGroup.GroupData group : response.getS2C().getGroupListList()) {
+           int type = group.getGroupType();
+           names.add(group.getGroupName());
+           groups.add(new GroupInfo(group.getGroupName(), type,
+                   type == QotGetUserSecurityGroup.GroupType.GroupType_System_VALUE));
+       }
+       log.info("Found {} stock groups: {}", groups.size(),
+               groups.stream().map(g -> g.name() + "(" + (g.isSystem() ? "System" : "Custom") + ")").toList());
+       return groups;
+   }
 
-    /**
-     * Fetches the stock list for a specific group name.
-     */
-    public List<StockInfo> getStocksInGroup(String groupName) throws AsyncRequestBridge.FutuRequestException {
+   /**
+    * Fetches the stock list for a specific group name.
+    */
+   public List<StockInfo> getStocksInGroup(String groupName) throws AsyncRequestBridge.FutuRequestException {
         FTAPI_Conn_Qot conn = connectionManager.getConnQot();
         if (conn == null) {
             throw new AsyncRequestBridge.FutuRequestException("Not connected to OpenD");
@@ -140,8 +153,12 @@ public class StockGroupService {
             throw new AsyncRequestBridge.FutuRequestException(
                     "ModifyUserSecurity(Add) failed for group [" + groupName + "]: " + response.getRetMsg());
         }
-        log.info("Added {} stock(s) to group [{}]", stocks.size(), groupName);
-    }
+       log.info("Added {} stock(s) to group [{}]", stocks.size(), groupName);
+   }
+
+   /** A Futu user-security group with its type. System groups cannot be written to. */
+   public record GroupInfo(String name, int type, boolean isSystem) {}
+
 
     /**
      * Resolves the target stock list based on configured group name.

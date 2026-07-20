@@ -34,8 +34,8 @@ class AddStocksControllerTest {
         props.setGroupHk("HK");
         props.setGroupCn("CN");
         inference = new MarketInference(props);
-        controller = new AddStocksController(ocrClient, inference, stockGroupService);
-    }
+       controller = new AddStocksController(ocrClient, inference, stockGroupService, props);
+   }
 
     @Test
     void ocrReturnsPreviewWithInferredMarkets() throws Exception {

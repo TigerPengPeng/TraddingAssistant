@@ -2,6 +2,8 @@ package com.autotrading.web;
 
 import com.autotrading.account.MarketInference;
 import com.autotrading.account.StockGroupService;
+import com.autotrading.futu.AsyncRequestBridge;
+import com.autotrading.config.RightTrendProperties;
 import com.autotrading.market.VisionOcrClient;
 import com.autotrading.model.StockInfo;
 import org.slf4j.Logger;
@@ -10,11 +12,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.*;
 
 /**
  * Adds stocks to Futu user-security groups from an uploaded image.
+ * All stocks are written to the account's first Custom group (typically "关注").
+ * System groups (US/HK/CN/All) are rejected by Futu modifyUserSecurity.
+ * Market is inferred for display only — it does not affect the target group.
  * <p>
  * Two-step flow: OCR returns a preview the user can edit, then the user
  * confirms the items they want to actually write to Futu.
@@ -27,12 +31,37 @@ public class AddStocksController {
     private final VisionOcrClient ocrClient;
     private final MarketInference inference;
     private final StockGroupService stockGroupService;
+    private final RightTrendProperties properties;
 
-    public AddStocksController(VisionOcrClient ocrClient, MarketInference inference,
-                               StockGroupService stockGroupService) {
+  public AddStocksController(VisionOcrClient ocrClient, MarketInference inference,
+                               StockGroupService stockGroupService,
+                               RightTrendProperties properties) {
         this.ocrClient = ocrClient;
         this.inference = inference;
         this.stockGroupService = stockGroupService;
+        this.properties = properties;
+    }
+
+    /**
+     * Resolves the writable target group for all added stocks.
+     * Futu modifyUserSecurity rejects System groups (US/HK/CN/All/etc),
+     * so we target the first Custom group — typically "关注".
+     */
+   private String resolveTargetGroup() throws AsyncRequestBridge.FutuRequestException {
+       List<StockGroupService.GroupInfo> groups = stockGroupService.getGroups();
+       String preferred = properties.getGroupAdd();
+       for (StockGroupService.GroupInfo g : groups) {
+           if (g.name().equals(preferred) && !g.isSystem()) {
+               return g.name();
+           }
+       }
+        for (StockGroupService.GroupInfo g : groups) {
+            if (!g.isSystem()) {
+                return g.name();
+            }
+        }
+        throw new AsyncRequestBridge.FutuRequestException(
+                "账户中没有可写入的自定义分组。请在富途客户端创建一个自定义分组后再试。");
     }
 
     /**
@@ -56,22 +85,49 @@ public class AddStocksController {
             return new OcrResponse(false, "识别失败: " + e.getMessage(), List.of());
         }
 
-        List<OcrItem> items = new ArrayList<>();
-        for (String code : codes) {
-            MarketInference.Result r = inference.infer(code);
-            items.add(new OcrItem(code, r.market(), r.marketLabel(),
-                    r.targetGroup(), r.isValid(), r.reason()));
-        }
+       List<OcrItem> items = new ArrayList<>();
+       String targetGroup;
+       try {
+           targetGroup = resolveTargetGroup();
+       } catch (Exception e) {
+           return new OcrResponse(false, e.getMessage(), List.of());
+       }
+       for (String code : codes) {
+           MarketInference.Result r = inference.infer(code);
+           items.add(new OcrItem(code, r.market(), r.marketLabel(),
+                   targetGroup, r.isValid(), r.reason()));
+       }
         String msg = items.isEmpty() ? "未识别到股票代码" : "识别到 " + items.size() + " 个候选";
         return new OcrResponse(true, msg, items);
     }
 
-    /**
-     * Step 2: write the confirmed items to Futu, grouped by target group.
-     * Each item is reported individually (ok/failed/already), so the user
-     * sees exactly what happened and can retry failures.
-     */
-    @PostMapping("/api/add-stocks")
+   /**
+    * Step 2: write the confirmed items to Futu, grouped by target group.
+    * Lists all user-security groups with their type (Custom vs System).
+    * Used by the frontend group picker; only Custom groups are writable.
+    */
+   @GetMapping("/api/add-stocks/groups")
+   public GroupsResponse groups() {
+       try {
+           return new GroupsResponse(true, "ok",
+                   stockGroupService.getGroups().stream()
+                           .map(g -> new GroupItem(g.name(), g.type(), g.isSystem()))
+                           .toList());
+       } catch (Exception e) {
+           log.warn("getGroups failed: {}", e.getMessage());
+           return new GroupsResponse(false, e.getMessage(), List.of());
+       }
+   }
+
+   public record GroupsResponse(boolean ok, String message, List<GroupItem> groups) {}
+   public record GroupItem(String name, int type, boolean isSystem) {}
+
+   /**
+    * Step 2: write the confirmed items to Futu, grouped by target group.
+    * Each item is reported individually (ok/failed/already), so the user
+    * sees exactly what happened and can retry failures.
+    */
+   @PostMapping("/api/add-stocks")
     public AddResponse add(@RequestBody AddRequest request) {
         if (request == null || request.items() == null || request.items().isEmpty()) {
             return new AddResponse(false, "无可添加的股票", List.of());
@@ -85,40 +141,39 @@ public class AddStocksController {
             if (!r.isValid()) {
                 continue;
             }
-            // Honor the user's edited market if it parses, else re-infer.
-            int market = item.market() != null && item.market() > 0 ? item.market() : r.market();
-            String group = (item.targetGroup() == null || item.targetGroup().isBlank())
-                    ? r.targetGroup() : item.targetGroup();
-            valid.add(new AddItem(item.code(), market, group));
-        }
-        if (valid.isEmpty()) {
-            return new AddResponse(false, "没有有效的可添加项", List.of());
-        }
+           // Honor the user's edited market if it parses, else re-infer.
+           int market = item.market() != null && item.market() > 0 ? item.market() : r.market();
+           valid.add(new AddItem(item.code(), market, null));
+       }
+       if (valid.isEmpty()) {
+           return new AddResponse(false, "没有有效的可添加项", List.of());
+       }
 
-        // Group by target group so each group is a single modifyUserSecurity call.
-        Map<String, List<StockInfo>> byGroup = new LinkedHashMap<>();
-        for (AddItem item : valid) {
-            byGroup.computeIfAbsent(item.targetGroup(), k -> new ArrayList<>())
-                    .add(new StockInfo(item.market(), item.code(), item.code()));
-        }
+       // All stocks go to the single writable Custom group.
+       String targetGroup;
+       try {
+           targetGroup = resolveTargetGroup();
+       } catch (Exception e) {
+           return new AddResponse(false, e.getMessage(), List.of());
+       }
+       List<StockInfo> stocks = new ArrayList<>();
+       for (AddItem item : valid) {
+           stocks.add(new StockInfo(item.market(), item.code(), item.code()));
+       }
 
-        List<AddResult> results = new ArrayList<>();
-        for (Map.Entry<String, List<StockInfo>> e : byGroup.entrySet()) {
-            String group = e.getKey();
-            List<StockInfo> stocks = e.getValue();
-            try {
-                stockGroupService.addStocksToGroup(group, stocks);
-                for (StockInfo s : stocks) {
-                    results.add(new AddResult(s.getCode(), group, true, "已添加"));
-                }
-            } catch (Exception ex) {
-                log.warn("addStocksToGroup failed for group [{}]: {}", group, ex.getMessage());
-                for (StockInfo s : stocks) {
-                    results.add(new AddResult(s.getCode(), group, false, ex.getMessage()));
-                }
-            }
-        }
-        long ok = results.stream().filter(AddResult::ok).count();
+       List<AddResult> results = new ArrayList<>();
+       try {
+           stockGroupService.addStocksToGroup(targetGroup, stocks);
+           for (StockInfo s : stocks) {
+               results.add(new AddResult(s.getCode(), targetGroup, true, "已添加"));
+           }
+       } catch (Exception ex) {
+           log.warn("addStocksToGroup failed for group [{}]: {}", targetGroup, ex.getMessage());
+           for (StockInfo s : stocks) {
+               results.add(new AddResult(s.getCode(), targetGroup, false, ex.getMessage()));
+           }
+       }
+       long ok = results.stream().filter(AddResult::ok).count();
         String msg = ok + "/" + results.size() + " 成功";
         return new AddResponse(ok > 0, msg, results);
     }
