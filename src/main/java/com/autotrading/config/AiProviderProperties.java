@@ -20,11 +20,20 @@ public class AiProviderProperties {
 
     private String defaultProvider = "deepseek";
     private Map<String, Provider> providers = new LinkedHashMap<>();
+    /**
+     * Separate vision (multimodal) provider for image OCR of stock codes.
+     * Decoupled from {@code providers} because text-only chat models
+     * (deepseek-chat, kimi-k3) cannot accept image input. Leave api-key blank
+     * to disable the add-stocks-from-image feature.
+     */
+    private Provider vision = new Provider();
 
     public String getDefaultProvider() { return defaultProvider; }
     public void setDefaultProvider(String defaultProvider) { this.defaultProvider = defaultProvider; }
     public Map<String, Provider> getProviders() { return providers; }
     public void setProviders(Map<String, Provider> providers) { this.providers = providers; }
+    public Provider getVision() { return vision; }
+    public void setVision(Provider vision) { this.vision = vision; }
 
     /** Returns configured providers (non-blank api-key), in declaration order. */
     public List<Map.Entry<String, Provider>> getConfiguredProviders() {
@@ -58,6 +67,18 @@ public class AiProviderProperties {
         if (!configured.isEmpty()) {
             Map.Entry<String, Provider> first = configured.get(0);
             return new Resolved(first.getKey(), first.getValue());
+        }
+        return null;
+    }
+
+    /**
+     * Returns the vision provider only when its api-key is non-blank, else null.
+     * Used to gate the add-stocks-from-image feature.
+     */
+    public Provider resolveVision() {
+        Provider v = getVision();
+        if (v != null && v.getApiKey() != null && !v.getApiKey().isBlank()) {
+            return v;
         }
         return null;
     }

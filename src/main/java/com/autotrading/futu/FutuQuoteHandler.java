@@ -58,7 +58,12 @@ public class FutuQuoteHandler implements FTSPI_Qot {
     }
 
     @Override
-    public void onReply_GetSecuritySnapshot(FTAPI_Conn conn, int serial, QotGetSecuritySnapshot.Response response) {
+   public void onReply_GetSecuritySnapshot(FTAPI_Conn conn, int serial, QotGetSecuritySnapshot.Response response) {
+       bridge.complete(serial, response);
+   }
+ 
+    @Override
+    public void onReply_ModifyUserSecurity(FTAPI_Conn conn, int serial, QotModifyUserSecurity.Response response) {
         bridge.complete(serial, response);
     }
 

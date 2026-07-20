@@ -289,7 +289,13 @@
 <div class="section">
   <div class="section-header">
     <span>Stocks</span>
-    <span class="count" id="stock-count"></span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn" id="add-stocks-btn" onclick="openAddStocksModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>添加股票</span>
+      </button>
+      <span class="count" id="stock-count"></span>
+    </div>
   </div>
   <div id="stock-table-wrap"></div>
 </div>
@@ -763,7 +769,223 @@ function updateEmailToggle(enabled, configured) {
 
 refresh();
 loadFluctuationConfig();loadMAAlertConfig();setInterval(refresh, 5000);
+
+// ===== Add stocks from image =====
+let addStocksItems = [];
+let addStocksPendingFile = null;
+
+function openAddStocksModal() {
+  resetAddStocksModal();
+  document.getElementById('add-stocks-modal').style.display = 'flex';
+}
+function closeAddStocksModal() {
+  document.getElementById('add-stocks-modal').style.display = 'none';
+}
+function resetAddStocksModal() {
+  addStocksItems = [];
+  addStocksPendingFile = null;
+  document.getElementById('add-stocks-file').value = '';
+  document.getElementById('add-stocks-drop-text').innerHTML = `
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;margin-bottom:8px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div>点击或拖拽图片到这里</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-top:4px">支持美股/港股/A股代码截图，单张 <= 10MB</div>`;
+  document.getElementById('add-stocks-status').textContent = '';
+  document.getElementById('add-stocks-preview').innerHTML = '';
+  document.getElementById('add-stocks-confirm').disabled = true;
+}
+
+const dz = () => document.getElementById('add-stocks-drop');
+document.addEventListener('DOMContentLoaded', () => {
+  const z = dz();
+  if (!z) return;
+  z.addEventListener('click', () => document.getElementById('add-stocks-file').click());
+  z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('drag'); });
+  z.addEventListener('dragleave', () => z.classList.remove('drag'));
+  z.addEventListener('drop', e => {
+    e.preventDefault(); z.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) onAddStocksFile({ target: { files: [f] } });
+  });
+});
+
+function onAddStocksFile(event) {
+  const f = event.target.files[0];
+  if (!f) return;
+  addStocksPendingFile = f;
+  document.getElementById('add-stocks-drop-text').innerHTML =
+    `<div style="color:var(--text)">${f.name}</div><div style="font-size:11px;color:var(--text-dim);margin-top:4px">${(f.size/1024).toFixed(1)} KB</div>`;
+  runOcr(f);
+}
+
+async function runOcr(file) {
+  const status = document.getElementById('add-stocks-status');
+  const btn = document.getElementById('add-stocks-confirm');
+  status.textContent = '识别中...';
+  btn.disabled = true;
+  addStocksItems = [];
+  document.getElementById('add-stocks-preview').innerHTML = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const resp = await fetch('/api/add-stocks/ocr', { method: 'POST', body: fd });
+    const r = await resp.json();
+    if (!r.ok) { status.innerHTML = '<span style="color:var(--red)">' + r.message + '</span>'; return; }
+    addStocksItems = (r.items || []).map(it => ({ ...it, selected: it.valid }));
+    status.textContent = r.message;
+    renderAddStocksPreview();
+    const anySelected = addStocksItems.some(i => i.selected);
+    btn.disabled = !anySelected;
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--red)">请求失败: ' + e.message + '</span>';
+  }
+}
+
+function renderAddStocksPreview() {
+  const wrap = document.getElementById('add-stocks-preview');
+  if (addStocksItems.length === 0) { wrap.innerHTML = ''; return; }
+  let rows = addStocksItems.map((it, i) => {
+    const pillCls = it.marketLabel === '美股' ? 'us' : it.marketLabel === '港股' ? 'hk' : (it.marketLabel === '沪市' || it.marketLabel === '深市') ? 'cn' : 'dim';
+    const pill = it.valid ? '<span class="pill ' + pillCls + '">' + it.marketLabel + '</span>' : '<span class="pill dim">无法识别</span>';
+    const checked = it.selected ? 'checked' : '';
+    const disabled = it.valid ? '' : 'disabled';
+    return '<tr>' +
+      '<td><input type="checkbox" ' + checked + ' ' + disabled + ' onchange="addStocksItems[' + i + '].selected=this.checked;updateConfirmBtn()"></td>' +
+      '<td style="font-family:SF Mono,Cascadia Code,monospace">' + it.code + '</td>' +
+      '<td>' + pill + '</td>' +
+      '<td style="color:var(--text-dim);font-size:12px">' + (it.targetGroup || '-') + '</td>' +
+      '</tr>';
+  }).join('');
+  wrap.innerHTML = '<table class="preview-table"><thead><tr><th></th><th>代码</th><th>市场</th><th>分组</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+function updateConfirmBtn() {
+  document.getElementById('add-stocks-confirm').disabled = !addStocksItems.some(i => i.selected);
+}
+
+async function confirmAddStocks() {
+  const btn = document.getElementById('add-stocks-confirm');
+  const status = document.getElementById('add-stocks-status');
+  const selected = addStocksItems.filter(i => i.selected);
+  if (selected.length === 0) return;
+  btn.disabled = true;
+  btn.textContent = '添加中...';
+  status.textContent = '正在写入 Futu 分组...';
+  try {
+    const resp = await fetch('/api/add-stocks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: selected.map(i => ({ code: i.code, market: i.market, targetGroup: i.targetGroup })) })
+    });
+    const r = await resp.json();
+    renderAddStocksResults(r, selected);
+    status.textContent = r.message;
+    if (r.ok) {
+      // refresh the monitored list so newly added stocks show up
+      try { await fetch('/api/refresh-stocks', { method: 'POST' }); } catch (e2) {}
+      await refresh();
+    }
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--red)">添加失败: ' + e.message + '</span>';
+  }
+  btn.textContent = '确认添加';
+}
+
+function renderAddStocksResults(r, selected) {
+  const wrap = document.getElementById('add-stocks-preview');
+  // Map results back to the selected items by code for display.
+  const byCode = {};
+  (r.results || []).forEach(res => { byCode[res.code] = res; });
+  let rows = selected.map(it => {
+    const res = byCode[it.code];
+    let badge;
+    if (res && res.ok) {
+      badge = '<span class="result-ok">✓ ' + res.targetGroup + '</span>';
+    } else if (res) {
+      badge = '<span class="result-fail" title="' + (res.message || '').replace(/"/g, '&quot;') + '">✗ ' + res.message + '</span>';
+    } else {
+      badge = '<span class="result-fail">✗ 未处理</span>';
+    }
+    return '<tr><td style="font-family:SF Mono,Cascadia Code,monospace">' + it.code + '</td><td>' + badge + '</td></tr>';
+  }).join('');
+  wrap.innerHTML = '<table class="preview-table"><thead><tr><th>代码</th><th>结果</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
 </script>
+
+<div id="add-stocks-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <span>从图片添加股票</span>
+      <button class="modal-close" onclick="closeAddStocksModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="add-stocks-drop" class="dropzone">
+        <input type="file" id="add-stocks-file" accept="image/*" style="display:none" onchange="onAddStocksFile(event)">
+        <div id="add-stocks-drop-text">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;margin-bottom:8px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div>点击或拖拽图片到这里</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">支持美股/港股/A股代码截图，单张 &lt;= 10MB</div>
+        </div>
+      </div>
+      <div id="add-stocks-status" style="font-size:13px;color:var(--text-dim);margin-top:10px"></div>
+      <div id="add-stocks-preview" style="margin-top:12px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="add-stocks-confirm" onclick="confirmAddStocks()" disabled>确认添加</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  display: flex; flex-direction: column;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px; font-weight: 600;
+}
+.modal-close {
+  background: none; border: none; color: var(--text-dim);
+  font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 16px; overflow-y: auto; }
+.modal-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end;
+}
+.dropzone {
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.dropzone:hover, .dropzone.drag { border-color: var(--blue); color: var(--text); }
+.preview-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.preview-table th, .preview-table td { padding: 6px 8px; border-bottom: 1px solid rgba(48,54,61,.5); text-align: left; }
+.preview-table th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+.preview-table input[type=checkbox] { accent-color: var(--blue); }
+.result-ok { color: var(--green); }
+.result-fail { color: var(--red); }
+.pill.us { background: rgba(88,166,255,.15); color: var(--blue); }
+.pill.hk { background: rgba(63,185,80,.15); color: var(--green); }
+.pill.cn { background: rgba(210,153,34,.15); color: var(--yellow); }
+</style>
 
 </body>
 </html>

@@ -7,9 +7,10 @@ import java.util.Objects;
  */
 public class StockInfo {
 
-    public static final int MARKET_US = 11;
-    public static final int MARKET_HK = 2;
-    public static final int MARKET_CN_SH = 21;
+   public static final int MARKET_US = 11;
+    // HK stocks = 1 (QotMarket_HK_Security). 2 is HK_Future; the old value was a latent bug.
+    public static final int MARKET_HK = 1;
+   public static final int MARKET_CN_SH = 21;
     public static final int MARKET_CN_SZ = 22;
 
     private final int market;

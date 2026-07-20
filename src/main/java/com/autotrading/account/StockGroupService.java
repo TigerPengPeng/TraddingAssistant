@@ -9,6 +9,7 @@ import com.futu.openapi.pb.Common;
 import com.futu.openapi.pb.QotCommon;
 import com.futu.openapi.pb.QotGetUserSecurity;
 import com.futu.openapi.pb.QotGetUserSecurityGroup;
+import com.futu.openapi.pb.QotModifyUserSecurity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -99,8 +100,47 @@ public class StockGroupService {
                 }
             }
         }
-        log.info("Group [{}] contains {} stocks", groupName, stocks.size());
-        return stocks;
+       log.info("Group [{}] contains {} stocks", groupName, stocks.size());
+       return stocks;
+   }
+    /**
+     * Adds the given stocks to a user-security group via QotModifyUserSecurity.
+     * Idempotent on Futu's side: adding an already-present stock is a no-op,
+     * not an error. Throws FutuRequestException on OpenD failure so the
+     * controller can map it to a per-group failure result.
+     */
+    public void addStocksToGroup(String groupName, List<StockInfo> stocks)
+            throws AsyncRequestBridge.FutuRequestException {
+        if (stocks == null || stocks.isEmpty()) {
+            return;
+        }
+        FTAPI_Conn_Qot conn = connectionManager.getConnQot();
+        if (conn == null) {
+            throw new AsyncRequestBridge.FutuRequestException("Not connected to OpenD");
+        }
+
+        QotModifyUserSecurity.C2S c2s = QotModifyUserSecurity.C2S.newBuilder()
+                .setGroupName(groupName)
+                .setOp(QotModifyUserSecurity.ModifyUserSecurityOp.ModifyUserSecurityOp_Add_VALUE)
+                .addAllSecurityList(stocks.stream()
+                        .map(stk -> QotCommon.Security.newBuilder()
+                                .setMarket(stk.getMarket())
+                                .setCode(stk.getCode())
+                                .build())
+                        .toList())
+                .build();
+        QotModifyUserSecurity.Request request = QotModifyUserSecurity.Request.newBuilder()
+                .setC2S(c2s)
+                .build();
+
+        int serial = conn.modifyUserSecurity(request);
+        QotModifyUserSecurity.Response response = bridge.await(serial, QotModifyUserSecurity.Response.class);
+
+        if (response.getRetType() != Common.RetType.RetType_Succeed_VALUE) {
+            throw new AsyncRequestBridge.FutuRequestException(
+                    "ModifyUserSecurity(Add) failed for group [" + groupName + "]: " + response.getRetMsg());
+        }
+        log.info("Added {} stock(s) to group [{}]", stocks.size(), groupName);
     }
 
     /**

@@ -1,4 +1,8 @@
 spring:
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:10MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:10MB}
   datasource:
     url: jdbc:h2:file:${DB_PATH:./data/autotrading};MODE=MySQL;AUTO_SERVER=TRUE
     driver-class-name: org.h2.Driver
@@ -57,6 +61,19 @@ ai:
       user-agent: ${AI_KIMI_USER_AGENT:claude-code/0.1.0}
       # temperature deliberately unset: kimi-k3 rejects any value other than 1,
       # so we omit the field and let the server apply its default.
+
+  # Vision (multimodal) provider for OCR of stock codes from uploaded images.
+  # Separate from providers.* above: text-only chat models cannot read images.
+  # Fill AI_VISION_API_KEY with a vision-capable model key to enable the
+  # "add stocks from image" feature on the homepage.
+  vision:
+    label: ${AI_VISION_LABEL:Vision}
+    api-key: ${AI_VISION_API_KEY:}
+    api-url: ${AI_VISION_API_URL:https://api.openai.com/v1/chat/completions}
+    model: ${AI_VISION_MODEL:gpt-4o}
+    json-mode: ${AI_VISION_JSON_MODE:true}
+    timeout-ms: ${AI_VISION_TIMEOUT_MS:60000}
+    temperature: ${AI_VISION_TEMPERATURE:0.1}
 
 right-trend:
   group-us: ${RIGHT_TREND_GROUP_US:US}
