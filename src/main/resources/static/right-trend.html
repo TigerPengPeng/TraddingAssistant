@@ -197,6 +197,12 @@ function confidencePill(c) {
   return '<span class="pill ' + cls + '">' + c + '</span>';
 }
 
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 async function loadLatest() {
   try {
     const resp = await fetch('/api/right-trend/latest');
@@ -209,7 +215,7 @@ async function loadLatest() {
     }
   } catch(e) {
     document.getElementById('report-container').innerHTML =
-      '<div class="empty-state">加载失败: ' + e.message + '</div>';
+      '<div class="empty-state">加载失败: ' + esc(e.message) + '</div>';
   }
 }
 
@@ -246,7 +252,7 @@ async function analyze() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> 分析中';
   document.getElementById('report-container').innerHTML =
-    '<div class="empty-state">正在调用「' + providerLabel + '」逐只分析，请稍候（约 1-3 分钟）...</div>';
+    '<div class="empty-state">正在调用「' + esc(providerLabel) + '」逐只分析，请稍候（约 1-3 分钟）...</div>';
   try {
     const resp = await fetch('/api/right-trend/analyze?groups=' + encodeURIComponent(groups)
         + '&sendEmail=' + sendEmail + '&provider=' + encodeURIComponent(provider), { method: 'POST' });
@@ -254,13 +260,13 @@ async function analyze() {
     if (d.status === 'ok') renderReport(d.report);
     else if (d.status === 'error') {
       document.getElementById('report-container').innerHTML =
-        '<div class="empty-state">' + (d.message || '分析失败') + '</div>';
+        '<div class="empty-state">' + esc(d.message || '分析失败') + '</div>';
     }
     btn.textContent = 'Done';
   } catch(e) {
     btn.textContent = 'Error';
     document.getElementById('report-container').innerHTML =
-      '<div class="empty-state">分析失败: ' + e.message + '</div>';
+      '<div class="empty-state">分析失败: ' + esc(e.message) + '</div>';
   }
   setTimeout(function() { btn.disabled = false; btn.textContent = '立即分析'; }, 2000);
 }
@@ -273,7 +279,7 @@ function renderReport(report) {
 
   var html = '<div class="summary-box">' +
     '<div>' +
-      '<div class="meta">' + (report.providerLabel ? report.providerLabel + ' · ' : '') + (report.groupNames || []).join(' + ') + ' &middot; ' + report.date + '</div>' +
+      '<div class="meta">' + (report.providerLabel ? esc(report.providerLabel) + ' · ' : '') + (report.groupNames || []).map(esc).join(' + ') + ' &middot; ' + esc(report.date) + '</div>' +
       '<div style="margin-top:4px">' +
         '<span class="count green">' + inTrend.length + '</span> <span style="color:var(--text-dim)">已进入右侧</span>' +
         ' &nbsp;/&nbsp; <span class="count">' + stocks.length + '</span> <span style="color:var(--text-dim)">只股票</span>' +
@@ -284,16 +290,16 @@ function renderReport(report) {
 
   function stockRow(s) {
     var signals = (s.keySignals || []).map(function(sig) {
-      return '<span class="signal pill blue">' + sig + '</span>';
+      return '<span class="signal pill blue">' + esc(sig) + '</span>';
     }).join('');
     return '<tr>' +
-      '<td><span class="stock-name">' + (s.stockName || s.stockKey) + '</span>' +
-        '<span class="stock-code">' + s.stockKey + '</span></td>' +
-      '<td class="num"><span class="pill dim">' + (s.groupName || '') + '</span></td>' +
+      '<td><span class="stock-name">' + esc(s.stockName || s.stockKey) + '</span>' +
+        '<span class="stock-code">' + esc(s.stockKey) + '</span></td>' +
+      '<td class="num"><span class="pill dim">' + esc(s.groupName || '') + '</span></td>' +
       '<td class="num">' + trendPill(s) + '</td>' +
       '<td class="num">' + confidencePill(s.confidence) + '</td>' +
       '<td class="signals-cell">' + signals + '</td>' +
-      '<td class="reason-cell">' + (s.success ? (s.reason || '') : '<span class="fail-text">' + (s.reason || '分析失败') + '</span>') + '</td>' +
+      '<td class="reason-cell">' + (s.success ? esc(s.reason || '') : '<span class="fail-text">' + esc(s.reason || '分析失败') + '</span>') + '</td>' +
     '</tr>';
   }
 

@@ -205,8 +205,14 @@ var chart = null;
 var candleSeries = null;
 var currentFrequency = 'day';
 
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 async function loadKLineData(frequency) {
-  var resp = await fetch('/api/stock/' + market + '/' + code + '/kline?frequency=' + frequency);
+  var resp = await fetch('/api/stock/' + market + '/' + encodeURIComponent(code) + '/kline?frequency=' + frequency);
   var data = await resp.json();
   var label = frequency === 'week' ? '120-Week' : '120-Day';
   var el = document.getElementById('chart-title');
@@ -230,7 +236,7 @@ async function switchFrequency(freq) {
     renderChart(data);
     renderBreakouts(data);
   } catch(e) {
-    document.getElementById('chart').innerHTML = '<div class="loading">Failed to load: ' + e.message + '</div>';
+    document.getElementById('chart').innerHTML = '<div class="loading">Failed to load: ' + esc(e.message) + '</div>';
   }
 }
 
@@ -257,7 +263,7 @@ async function init() {
     loadSignals();
     loadAnalysisHistory();
   } catch(e) {
-    document.getElementById('chart').innerHTML = '<div class="loading">Failed to load: ' + e.message + '</div>';
+    document.getElementById('chart').innerHTML = '<div class="loading">Failed to load: ' + esc(e.message) + '</div>';
   }
 }
 
@@ -371,7 +377,7 @@ function renderBreakouts(data) {
 
 async function loadSignals() {
   try {
-    var resp = await fetch('/api/stock/' + market + '/' + code + '/signals');
+    var resp = await fetch('/api/stock/' + market + '/' + encodeURIComponent(code) + '/signals');
     var data = await resp.json();
 
     // Summary
@@ -394,9 +400,9 @@ async function loadSignals() {
       return '<div class="signal-item">' +
         '<span class="signal-tag ' + tagClass + '">' + tagText + '</span>' +
         '<div class="signal-reason">' +
-          '<div>' + s.reason + '</div>' +
+          '<div>' + esc(s.reason) + '</div>' +
           '<div><span class="signal-date">' + dateShort + ' @ ' + (s.price || '').toFixed(2) +
-          '</span> <span class="signal-strategy">' + s.strategy + '</span></div>' +
+          '</span> <span class="signal-strategy">' + esc(s.strategy) + '</span></div>' +
         '</div></div>';
     }).join('');
     document.getElementById('signal-list').innerHTML = html;
@@ -417,7 +423,7 @@ async function loadSignals() {
     }
   } catch(e) {
     document.getElementById('signal-list').innerHTML =
-      '<div class="loading" style="padding:20px">信号加载失败: ' + e.message + '</div>';
+      '<div class="loading" style="padding:20px">信号加载失败: ' + esc(e.message) + '</div>';
   }
 }
 
@@ -427,18 +433,18 @@ async function runAnalysis() {
   el.innerHTML = '<div class="loading">Analyzing...</div>';
 
   try {
-    var resp = await fetch('/api/stock/' + market + '/' + code + '/analysis?strategy=' + strategy);
+    var resp = await fetch('/api/stock/' + market + '/' + encodeURIComponent(code) + '/analysis?strategy=' + strategy);
     var data = await resp.json();
 
     if (data.error) {
-      el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">Error</div>' + data.error + '</div>';
+      el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">Error</div>' + esc(data.error) + '</div>';
       return;
     }
 
     var type = data.signalType || 'neutral';
-    var html = '<div class="signal-box ' + type + '"><div class="signal-type">' +
+    var html = '<div class="signal-box ' + esc(type) + '"><div class="signal-type">' +
       (type === 'bullish' ? 'Bullish' : type === 'bearish' ? 'Bearish' : 'Neutral') +
-      '</div>' + data.signal + '</div>';
+      '</div>' + esc(data.signal) + '</div>';
 
     // Indicator details (skip generic keys)
     var skipKeys = new Set(['strategy','signal','signalType','signal','error','breakouts','currentPrice','signalType']);
@@ -448,8 +454,8 @@ async function runAnalysis() {
       var val = data[key];
       if (typeof val === 'object') continue;
       if (typeof val === 'number') val = Number(val).toFixed(2);
-      detailHtml += '<div class="indicator-row"><span class="label">' + key +
-        '</span><span class="value">' + val + '</span></div>';
+      detailHtml += '<div class="indicator-row"><span class="label">' + esc(key) +
+        '</span><span class="value">' + esc(val) + '</span></div>';
     }
     detailHtml += '</div>';
 
@@ -460,7 +466,7 @@ async function runAnalysis() {
         var color = ma.above ? '#3fb950' : '#f85149';
         detailHtml += '<div class="indicator-row"><span class="label">MA' + ma.period +
           '</span><span class="value" style="color:' + color + '">' +
-          ma.value + ' (' + (ma.above ? 'above' : 'below') + ' ' +
+          esc(ma.value) + ' (' + (ma.above ? 'above' : 'below') + ' ' +
           (ma.distancePercent > 0 ? '+' : '') + ma.distancePercent + '%)</span></div>';
       });
       detailHtml += '</div>';
@@ -468,7 +474,7 @@ async function runAnalysis() {
 
     el.innerHTML = html + detailHtml;
   } catch(e) {
-    el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">Error</div>' + e.message + '</div>';
+    el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">Error</div>' + esc(e.message) + '</div>';
   }
 }
 
@@ -481,14 +487,14 @@ async function runAIAnalysis() {
   el.innerHTML = '<div class="loading">AI 正在分析股票数据，请稍候...</div>';
 
   try {
-    var resp = await fetch('/api/stock/' + market + '/' + code + '/analyze-ai', {
+    var resp = await fetch('/api/stock/' + market + '/' + encodeURIComponent(code) + '/analyze-ai', {
       method: 'POST'
     });
     var data = await resp.json();
 
     if (!data.success) {
-      el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">分析失败</div>' + 
-        (data.error || '未知错误') + '</div>';
+      el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">分析失败</div>' +
+        esc(data.error || '未知错误') + '</div>';
       return;
     }
 
@@ -499,7 +505,7 @@ async function runAIAnalysis() {
     var html = '<div class="signal-box ' + ratingClass + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
         '<span class="signal-type">评级: ' + ratingText + '</span>' +
-        '<span class="rating-tag ' + rating + '">' + rating + '</span>' +
+        '<span class="rating-tag ' + esc(rating) + '">' + esc(rating) + '</span>' +
       '</div>';
     
     if (data.targetPrice) {
@@ -508,7 +514,7 @@ async function runAIAnalysis() {
     }
     
     if (data.summary) {
-      html += '<div style="font-size:13px;line-height:1.6">' + data.summary + '</div>';
+      html += '<div style="font-size:13px;line-height:1.6">' + esc(data.summary) + '</div>';
     }
     
     html += '</div>';
@@ -520,12 +526,12 @@ async function runAIAnalysis() {
         for (var key in data.analysis) {
           var val = data.analysis[key];
           if (typeof val === 'string' || typeof val === 'number') {
-            html += '<div class="indicator-row"><span class="label">' + key + 
-              '</span><span class="value">' + val + '</span></div>';
+            html += '<div class="indicator-row"><span class="label">' + esc(key) +
+              '</span><span class="value">' + esc(val) + '</span></div>';
           }
         }
       } else {
-        html += '<div style="font-size:12px;color:var(--text-dim)">' + data.analysis + '</div>';
+        html += '<div style="font-size:12px;color:var(--text-dim)">' + esc(data.analysis) + '</div>';
       }
       html += '</div>';
     }
@@ -536,8 +542,8 @@ async function runAIAnalysis() {
     loadAnalysisHistory();
 
   } catch(e) {
-    el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">错误</div>' + 
-      '分析请求失败: ' + e.message + '</div>';
+      el.innerHTML = '<div class="signal-box neutral"><div class="signal-type">错误</div>' +
+      '分析请求失败: ' + esc(e.message) + '</div>';
   } finally {
     btn.disabled = false;
     btn.textContent = '🔮 AI 智能分析';
@@ -548,7 +554,7 @@ async function loadAnalysisHistory() {
   var el = document.getElementById('analysis-history');
   
   try {
-    var resp = await fetch('/api/stock/' + market + '/' + code + '/analysis-history');
+    var resp = await fetch('/api/stock/' + market + '/' + encodeURIComponent(code) + '/analysis-history');
     var data = await resp.json();
     
     var history = data.history || [];
@@ -561,10 +567,10 @@ async function loadAnalysisHistory() {
     var html = history.slice(0, 10).map(function(item) {
       return '<div class="history-item">' +
         '<div class="history-header">' +
-          '<span class="rating-tag ' + (item.rating || 'HOLD') + '">' + (item.rating || 'HOLD') + '</span>' +
-          '<span class="signal-date">' + (item.tradeDate || '') + '</span>' +
+          '<span class="rating-tag ' + esc(item.rating || 'HOLD') + '">' + esc(item.rating || 'HOLD') + '</span>' +
+          '<span class="signal-date">' + esc(item.tradeDate || '') + '</span>' +
         '</div>' +
-        '<div class="history-summary">' + (item.summary || '无摘要') + '</div>' +
+        '<div class="history-summary">' + esc(item.summary || '无摘要') + '</div>' +
         (item.targetPrice ? '<div class="history-target">目标价: $' + item.targetPrice.toFixed(2) + '</div>' : '') +
       '</div>';
     }).join('');
@@ -572,7 +578,7 @@ async function loadAnalysisHistory() {
     el.innerHTML = html;
     
   } catch(e) {
-    el.innerHTML = '<div class="loading" style="padding:20px">历史记录加载失败: ' + e.message + '</div>';
+    el.innerHTML = '<div class="loading" style="padding:20px">历史记录加载失败: ' + esc(e.message) + '</div>';
   }
 }
 
