@@ -4,8 +4,9 @@ import com.autotrading.model.Direction;
 import com.autotrading.model.MAEvent;
 import com.autotrading.model.StockInfo;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.format.DateTimeFormatter;
+import java.time.Instant;
+import java.time.ZoneId;
 
 /**
  * Generates email subject and HTML body for alert events.
@@ -17,7 +18,8 @@ public class NotificationTemplate {
                                    java.util.List<Integer> brokenPeriods,
                                    java.util.Map<Integer, Double> maValues) {}
 
-    private static final SimpleDateFormat TS_FMT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter TS_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final String GREEN = "#16a34a";
     private static final String RED = "#dc2626";
 
@@ -52,7 +54,7 @@ public class NotificationTemplate {
         sb.append(row("MA" + event.getMaPeriod(), formatPrice(event.getMaValue())));
         sb.append(row("交易时段", event.getSession().getLabel()));
         sb.append(row("市场", marketLabel));
-        sb.append(row("时间", TS_FMT.format(new Date(event.getTimestamp()))));
+        sb.append(row("时间", TS_FMT.format(Instant.ofEpochMilli(event.getTimestamp()))));
         sb.append("</table>");
         return htmlWrap(sb.toString());
     }
@@ -84,7 +86,7 @@ public class NotificationTemplate {
               .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
               .append(formatPrice(event.getMaValue())).append("</td>")
               .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
-              .append(TS_FMT.format(new Date(event.getTimestamp()))).append("</td>")
+              .append(TS_FMT.format(Instant.ofEpochMilli(event.getTimestamp()))).append("</td>")
               .append("</tr>");
         }
         sb.append("</table>");
@@ -343,7 +345,7 @@ public class NotificationTemplate {
         sb.append(row("信号日期", rec.signalDate()));
         sb.append(row("分析原因", rec.reason()));
         sb.append(row("市场", marketLabel));
-        sb.append(row("时间", TS_FMT.format(new Date(rec.timestamp()))));
+        sb.append(row("时间", TS_FMT.format(Instant.ofEpochMilli(rec.timestamp()))));
         sb.append("</table>");
         return htmlWrap(sb.toString());
     }
@@ -374,10 +376,10 @@ public class NotificationTemplate {
     }
 
     private static String marketLabel(int market) {
-        if (market == 11) return "美股";
+        if (market == StockInfo.MARKET_US) return "美股";
         if (market == StockInfo.MARKET_HK) return "港股";
-        if (market == 21) return "A股(沪)";
-        if (market == 22) return "A股(深)";
+        if (market == StockInfo.MARKET_CN_SH) return "A股(沪)";
+        if (market == StockInfo.MARKET_CN_SZ) return "A股(深)";
         return "M" + market;
     }
 }

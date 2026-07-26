@@ -17,6 +17,10 @@ spring:
         format_sql: false
   application:
     name: futu-stock-monitor
+  task:
+    scheduling:
+      pool:
+        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:4}
   mail:
     host: ${MAIL_HOST:}
     port: ${MAIL_PORT:465}

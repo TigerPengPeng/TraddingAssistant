@@ -206,7 +206,7 @@ public class StockAnalysisService {
 
     private Map<String, Object> analyzeVolume(List<KLineService.KLineData> klines, List<Long> volumes) {
         Map<String, Object> result = new LinkedHashMap<>();
-        if (volumes.size() < 20) { result.put("error", "Insufficient data for Volume"); return result; }
+        if (volumes.size() < 21) { result.put("error", "Insufficient data for Volume"); return result; }
 
         long curVol = volumes.get(volumes.size() - 1);
         double avgVol = volumes.subList(volumes.size() - 21, volumes.size() - 1).stream()

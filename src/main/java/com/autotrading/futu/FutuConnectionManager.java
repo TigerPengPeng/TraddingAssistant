@@ -48,6 +48,7 @@ public class FutuConnectionManager implements FutuConnHandler.ConnectionStateLis
     private final AtomicBoolean apiInitialized = new AtomicBoolean(false);
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private final AtomicInteger reconnectAttempt = new AtomicInteger(0);
+    private volatile boolean firstConnectDone = false;
 
     private volatile CountDownLatch connectLatch;
     private volatile long connectErrCode = 0;
@@ -128,7 +129,8 @@ public class FutuConnectionManager implements FutuConnHandler.ConnectionStateLis
             connectLatch.countDown();
         }
         reconnectAttempt.set(0);
-        boolean wasReconnect = connTrd != null; // simplified check
+        boolean wasReconnect = firstConnectDone;
+        firstConnectDone = true;
         if (wasReconnect) {
             log.info("Reconnected successfully");
             if (postReconnectHook != null) {

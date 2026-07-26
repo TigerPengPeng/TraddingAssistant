@@ -167,10 +167,10 @@ public class RightTrendAnalysisService {
     }
 
     private String marketLabel(int market) {
-        if (market == 11) return "美股";
+        if (market == StockInfo.MARKET_US) return "美股";
         if (market == StockInfo.MARKET_HK) return "港股";
-        if (market == 21) return "A股(沪)";
-        if (market == 22) return "A股(深)";
+        if (market == StockInfo.MARKET_CN_SH) return "A股(沪)";
+        if (market == StockInfo.MARKET_CN_SZ) return "A股(深)";
         return "M" + market;
     }
 
