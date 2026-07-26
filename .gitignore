@@ -41,6 +41,8 @@ data/
 
 # Agent tooling artifacts (indexes, caches, configs — regenerable, not runtime)
 .claude/
+.claude-flow/
+.ccg/
 .codebase-memory/
 graphify-out/
 CLAUDE.md
