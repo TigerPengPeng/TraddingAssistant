@@ -2,6 +2,7 @@ package com.autotrading.notification;
 
 import com.autotrading.model.Direction;
 import com.autotrading.model.MAEvent;
+import com.autotrading.model.StockInfo;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -374,7 +375,7 @@ public class NotificationTemplate {
 
     private static String marketLabel(int market) {
         if (market == 11) return "美股";
-        if (market == 2) return "港股";
+        if (market == StockInfo.MARKET_HK) return "港股";
         if (market == 21) return "A股(沪)";
         if (market == 22) return "A股(深)";
         return "M" + market;

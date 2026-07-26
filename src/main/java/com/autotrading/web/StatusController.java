@@ -141,7 +141,7 @@ public class StatusController {
     private String marketName(int market) {
         return switch (market) {
             case 11 -> "US";
-            case 2 -> "HK";
+            case StockInfo.MARKET_HK -> "HK";
             case 21 -> "SH";
             case 22 -> "SZ";
             default -> "M" + market;

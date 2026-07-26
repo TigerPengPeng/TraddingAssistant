@@ -77,4 +77,14 @@ class NotificationTemplateTest {
         assertNotNull(body);
         assertTrue(body.contains("0 条"));
     }
+
+    @Test
+    void maEventBody_hkMarket_rendersGanggu() {
+        // Regression: MARKET_HK changed 2 -> 1; marketLabel must map 1 -> 港股, not M1.
+        MAEvent hk = new MAEvent("1.00700", "Tencent", 5, Direction.BREAK_UP,
+                380.0, 370.0, TradingSession.REGULAR);
+        String body = NotificationTemplate.maEventBody(hk);
+        assertTrue(body.contains("港股"), () -> "HK market should render 港股, got: " + body);
+        assertFalse(body.contains("M1"), () -> "HK market should not render M1, got: " + body);
+    }
 }
