@@ -26,9 +26,11 @@ class AddStocksControllerTest {
     private AddStocksController controller;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         ocrClient = mock(VisionOcrClient.class);
         stockGroupService = mock(StockGroupService.class);
+        when(stockGroupService.getGroups()).thenReturn(List.of(
+                new StockGroupService.GroupInfo("pool", 1, false)));
         RightTrendProperties props = new RightTrendProperties();
         props.setGroupUs("US");
         props.setGroupHk("HK");
@@ -50,9 +52,11 @@ class AddStocksControllerTest {
         // valid US / HK / SH, invalid unknown A-share prefix
         assertEquals("AAPL", resp.items().get(0).code());
         assertTrue(resp.items().get(0).valid());
-        assertEquals("HK", resp.items().get(1).targetGroup());
-        assertEquals("CN", resp.items().get(2).targetGroup());
+        assertEquals("港股", resp.items().get(1).marketLabel());
+        assertEquals("沪市", resp.items().get(2).marketLabel());
         assertFalse(resp.items().get(3).valid());
+        // all items target the single writable custom group
+        assertTrue(resp.items().stream().allMatch(i -> "pool".equals(i.targetGroup())));
     }
 
     @Test
@@ -74,8 +78,8 @@ class AddStocksControllerTest {
     }
 
     @Test
-    void addGroupsByTargetGroupAndBatchesPerGroup() throws Exception {
-        // US + HK + CN -> three groups, three modifyUserSecurity calls.
+    void addsAllValidStocksToSingleCustomGroup() throws Exception {
+        // All valid stocks (US + HK + CN) go to the single writable custom group.
         AddRequest req = new AddRequest(List.of(
                 new AddItem("AAPL", null, null),
                 new AddItem("MSFT", null, null),
@@ -87,17 +91,14 @@ class AddStocksControllerTest {
         assertTrue(resp.ok());
         assertEquals(4, resp.results().size());
         assertTrue(resp.results().stream().allMatch(r -> r.ok()));
-        // three distinct groups -> three batched calls
-        verify(stockGroupService, times(3)).addStocksToGroup(anyString(), anyList());
-        verify(stockGroupService).addStocksToGroup(eq("US"), argThat(l -> l.size() == 2));
-        verify(stockGroupService).addStocksToGroup(eq("HK"), argThat(l -> l.size() == 1));
-        verify(stockGroupService).addStocksToGroup(eq("CN"), argThat(l -> l.size() == 1));
+        // single writable group -> one batched call with all 4 stocks
+        verify(stockGroupService, times(1)).addStocksToGroup(eq("pool"), argThat(l -> l.size() == 4));
     }
 
     @Test
-    void addReportsPerItemFailureWhenFutuRejectsGroup() throws Exception {
+    void addReportsAllItemsFailedWhenFutuRejectsGroup() throws Exception {
         doThrow(new AsyncRequestBridge.FutuRequestException("GROUP_NOT_FOUND"))
-                .when(stockGroupService).addStocksToGroup(eq("HK"), anyList());
+                .when(stockGroupService).addStocksToGroup(eq("pool"), anyList());
 
         AddRequest req = new AddRequest(List.of(
                 new AddItem("AAPL", null, null),
@@ -105,11 +106,11 @@ class AddStocksControllerTest {
 
         var resp = controller.add(req);
 
-        // US succeeded, HK failed; overall ok=true because at least one group worked.
-        assertTrue(resp.ok());
-        var hk = resp.results().stream().filter(r -> r.targetGroup().equals("HK")).findFirst().orElseThrow();
-        assertFalse(hk.ok());
-        assertTrue(hk.message().contains("GROUP_NOT_FOUND"));
+        // Single custom group rejected -> all items fail, ok=false.
+        assertFalse(resp.ok());
+        assertEquals(2, resp.results().size());
+        assertTrue(resp.results().stream().noneMatch(r -> r.ok()));
+        assertTrue(resp.results().stream().allMatch(r -> r.message().contains("GROUP_NOT_FOUND")));
     }
 
     @Test
@@ -122,7 +123,7 @@ class AddStocksControllerTest {
 
         assertTrue(resp.ok());
         assertEquals(1, resp.results().size());
-        verify(stockGroupService).addStocksToGroup(eq("US"), argThat(l -> l.size() == 1));
+        verify(stockGroupService).addStocksToGroup(eq("pool"), argThat(l -> l.size() == 1));
     }
 
     @Test
