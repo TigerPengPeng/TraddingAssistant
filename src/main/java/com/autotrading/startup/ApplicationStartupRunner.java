@@ -149,25 +149,51 @@ public class ApplicationStartupRunner {
 
     /**
      * Called after a successful reconnect.
-     * Restores subscriptions and re-enables monitoring.
+     * Restores subscriptions and re-enables monitoring. If the initial startup
+     * load was skipped (OpenD wasn't ready at boot, so monitoredStocks is empty),
+     * this is where the stock list is finally loaded so the system self-heals
+     * instead of staying empty until a manual /api/refresh-stocks.
      */
     private void onReconnected() {
         log.info("Post-reconnect: restoring monitoring...");
         try {
-            if (!monitoredStocks.isEmpty()) {
-                if (usingSnapshotFallback) {
-                    snapshotPollingService.setPolling(true);
-                    snapshotPollingService.pollSnapshots();
-                    log.info("Post-reconnect: snapshot polling re-enabled");
-                } else {
-                    int n = subscriptionService.resubscribeAll();
-                    log.info("Post-reconnect: {} stocks resubscribed",
-                            n);
-                }
-                quoteProcessor.setMonitoring(true);
+            if (monitoredStocks.isEmpty()) {
+                // Startup skipped reloadStocks() because OpenD wasn't ready.
+                // Run the full load now. MUST happen off the SDK callback thread
+                // (this thread is FTAPI4JNet): reloadStocks() awaits SDK
+                // responses, and awaiting on the very thread that delivers them
+                // would deadlock/timeout every request.
+                log.info("Post-reconnect: monitored list empty, reloading from group (async)");
+                Thread t = new Thread(this::reloadStocksAfterReconnect, "post-reconnect-reload");
+                t.setDaemon(true);
+                t.start();
+                return;
             }
+            if (usingSnapshotFallback) {
+                snapshotPollingService.setPolling(true);
+                snapshotPollingService.pollSnapshots();
+                log.info("Post-reconnect: snapshot polling re-enabled");
+            } else {
+                int n = subscriptionService.resubscribeAll();
+                log.info("Post-reconnect: {} stocks resubscribed", n);
+            }
+            quoteProcessor.setMonitoring(true);
         } catch (Exception e) {
             log.error("Post-reconnect monitoring restore failed: {}", e.getMessage(), e);
+        }
+    }
+
+    /** Runs reloadStocks() off the SDK callback thread, logging the outcome. */
+    private void reloadStocksAfterReconnect() {
+        try {
+            int loaded = reloadStocks();
+            if (loaded == 0) {
+                log.warn("Post-reconnect reload returned 0 stocks; will retry on next reconnect");
+            } else {
+                log.info("Post-reconnect reload complete: {} stocks monitored", loaded);
+            }
+        } catch (Exception e) {
+            log.error("Post-reconnect reload failed: {}", e.getMessage(), e);
         }
     }
 
