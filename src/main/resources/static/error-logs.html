@@ -132,7 +132,7 @@ function renderLogs(logs) {
     let html = '<div class="log-entry">' +
       '<div class="log-header">' +
       '<span class="log-time">' + new Date(l.timestamp).toLocaleString('zh-CN') + '</span>' +
-      '<span class="log-logger">[' + l.thread + '] ' + l.logger + '</span>' +
+      '<span class="log-logger">[' + escapeHtml(l.thread) + '] ' + escapeHtml(l.logger) + '</span>' +
       '</div>' +
       '<div class="log-msg">' + escapeHtml(l.message) + '</div>';
     if (l.stackTrace && l.stackTrace.length > 0) {
@@ -144,8 +144,9 @@ function renderLogs(logs) {
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 async function clearLogs() {

@@ -424,7 +424,7 @@ function renderMAAlertRules() {
     }).join('');
     return '<div style="border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px">' +
       '<div style="display:flex;align-items:center;gap:8px">' +
-      '<input type="text" placeholder="规则名称" value="' + (r.name||'') + '" style="flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" onchange="maAlertRules[' + i + '].name=this.value">' +
+      '<input type="text" placeholder="规则名称" value="' + esc(r.name||'') + '" style="flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px;font-size:12px" onchange="maAlertRules[' + i + '].name=this.value">' +
       '<select style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px" onchange="maAlertRules[' + i + '].logic=this.value">' +
       '<option value="OR"' + (r.logic==='OR'?' selected':'') + '>OR</option>' +
       '<option value="AND"' + (r.logic==='AND'?' selected':'') + '>AND</option></select>' +
@@ -525,6 +525,12 @@ async function manualRefresh() {
   setTimeout(function() { btn.disabled = false; label.textContent = 'Refresh'; }, 1500);
 }
 
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function renderCards(d) {
   const c = d.connection;
   const m = d.monitoring;
@@ -553,7 +559,7 @@ function renderCards(d) {
       <div class="card-row"><span class="label">MA periods</span><span class="value">${cfg.maPeriods.join(', ')}</span></div>
       <div class="card-row"><span class="label">Fluctuation</span><span class="value">+/-${cfg.priceChangeThreshold}%</span></div>
       <div class="card-row"><span class="label">Cooldown</span><span class="value">${cfg.alertCooldownMinutes} min</span></div>
-      <div class="card-row"><span class="label">Group</span><span class="value">${cfg.groupName}</span></div>
+      <div class="card-row"><span class="label">Group</span><span class="value">${esc(cfg.groupName)}</span></div>
     </div>
   `;
 }
@@ -573,12 +579,12 @@ function renderStocks(stocks) {
     const pctStr = hasPrice ? fmtPct(pct) : '--';
     const mk = s.key ? s.key.split('.')[0] : '';
     return `<tr style="cursor:pointer" onclick="window.location.href='/stock.html?market=${mk}&code=${encodeURIComponent(s.code)}'">
-      <td>${s.code}</td>
-      <td>${s.name || '--'}</td>
-      <td><span class="pill dim">${s.market}</span></td>
+      <td>${esc(s.code)}</td>
+      <td>${esc(s.name || '--')}</td>
+      <td><span class="pill dim">${esc(s.market)}</span></td>
       <td class="num">${hasPrice ? fmtPrice(s.price) : '--'}</td>
       <td class="num ${pctClass}">${pctStr}</td>
-      <td><span class="${sessionPillClass(s.session)}">${s.session}</span></td>
+      <td><span class="${sessionPillClass(s.session)}">${esc(s.session)}</span></td>
     </tr>`;
   }).join('');
   document.getElementById('stock-table-wrap').innerHTML = `
@@ -606,13 +612,13 @@ function renderAlerts(alerts) {
     return `<div class="alert-item" style="opacity:${a.suppressed ? 0.5 : 1}">
       <span class="alert-time">${fmtTime(a.timestamp)}</span>
       <span>
-        <span class="alert-stock">${a.stockName || a.stockKey}</span>
+        <span class="alert-stock">${esc(a.stockName || a.stockKey)}</span>
         <span class="alert-detail" style="margin-left:8px">
-          <span class="pill ${typeClass}">${typeLabel}</span> ${a.detail}${a.suppressed ? '<span class="pill" style="background:#6b7280;color:#fff;margin-left:4px">已静音</span>' : ''}
+          <span class="pill ${typeClass}">${typeLabel}</span> ${esc(a.detail)}${a.suppressed ? '<span class="pill" style="background:#6b7280;color:#fff;margin-left:4px">已静音</span>' : ''}
         </span>
       </span>
       <span class="alert-price">${fmtPrice(a.price)}</span>
-      <span class="${sessionPillClass(a.session)}">${a.session}</span>
+      <span class="${sessionPillClass(a.session)}">${esc(a.session)}</span>
     </div>`;
   }).join('');
   document.getElementById('alerts-list').innerHTML = items;
@@ -650,10 +656,10 @@ function renderSignalRecords(signals) {
     var label = isBuy ? '买入' : '卖出';
     return '<div class="alert-item">' +
       '<span>' +
-        '<span class="alert-stock">' + (s.stockName || s.stockKey) + '</span>' +
+        '<span class="alert-stock">' + esc(s.stockName || s.stockKey) + '</span>' +
         '<span class="alert-detail" style="margin-left:8px">' +
           '<span class="pill ' + pillClass + '">' + label + '</span> ' +
-          s.strategy + ' <span style="color:var(--text-dim);font-size:12px">' + s.reason + '</span>' +
+          esc(s.strategy) + ' <span style="color:var(--text-dim);font-size:12px">' + esc(s.reason) + '</span>' +
         '</span>' +
       '</span>' +
       '<span class="alert-price">' + fmtPrice(s.price) + '</span>' +
@@ -689,8 +695,8 @@ function renderEmailHistory(emails) {
       : '<span class="pill red">失败</span>';
     return '<div class="email-item">' +
       '<span class="alert-time">' + fmtTime(e.timestamp) + '</span>' +
-      '<span class="pill ' + tc + '">' + e.type + '</span>' +
-      '<span style="color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + e.subject + '</span>' +
+      '<span class="pill ' + tc + '">' + esc(e.type) + '</span>' +
+      '<span style="color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.subject) + '</span>' +
       statusPill +
     '</div>';
   }).join('');
@@ -829,14 +835,14 @@ async function runOcr(file) {
   try {
     const resp = await fetch('/api/add-stocks/ocr', { method: 'POST', body: fd });
     const r = await resp.json();
-    if (!r.ok) { status.innerHTML = '<span style="color:var(--red)">' + r.message + '</span>'; return; }
+    if (!r.ok) { status.innerHTML = '<span style="color:var(--red)">' + esc(r.message) + '</span>'; return; }
     addStocksItems = (r.items || []).map(it => ({ ...it, selected: it.valid }));
     status.textContent = r.message;
     renderAddStocksPreview();
     const anySelected = addStocksItems.some(i => i.selected);
     btn.disabled = !anySelected;
   } catch (e) {
-    status.innerHTML = '<span style="color:var(--red)">请求失败: ' + e.message + '</span>';
+    status.innerHTML = '<span style="color:var(--red)">请求失败: ' + esc(e.message) + '</span>';
   }
 }
 
@@ -850,12 +856,12 @@ function renderAddStocksPreview() {
     const disabled = it.valid ? '' : 'disabled';
     return '<tr>' +
       '<td><input type="checkbox" ' + checked + ' ' + disabled + ' onchange="addStocksItems[' + i + '].selected=this.checked;updateConfirmBtn()"></td>' +
-      '<td style="font-family:SF Mono,Cascadia Code,monospace">' + it.code + '</td>' +
+      '<td style="font-family:SF Mono,Cascadia Code,monospace">' + esc(it.code) + '</td>' +
       '<td>' + pill + '</td>' +
       '</tr>';
   }).join('');
   const grp = addStocksItems[0].targetGroup || '关注';
-  wrap.innerHTML = '<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">目标分组: <span style="color:var(--blue)">' + grp + '</span></div><table class="preview-table"><thead><tr><th></th><th>代码</th><th>市场</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  wrap.innerHTML = '<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">目标分组: <span style="color:var(--blue)">' + esc(grp) + '</span></div><table class="preview-table"><thead><tr><th></th><th>代码</th><th>市场</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 function updateConfirmBtn() {
   document.getElementById('add-stocks-confirm').disabled = !addStocksItems.some(i => i.selected);
@@ -883,7 +889,7 @@ async function confirmAddStocks() {
       await refresh();
     }
   } catch (e) {
-    status.innerHTML = '<span style="color:var(--red)">添加失败: ' + e.message + '</span>';
+    status.innerHTML = '<span style="color:var(--red)">添加失败: ' + esc(e.message) + '</span>';
   }
   btn.textContent = '确认添加';
 }
@@ -897,13 +903,13 @@ function renderAddStocksResults(r, selected) {
     const res = byCode[it.code];
     let badge;
     if (res && res.ok) {
-      badge = '<span class="result-ok">✓ ' + res.targetGroup + '</span>';
+      badge = '<span class="result-ok">✓ ' + esc(res.targetGroup) + '</span>';
     } else if (res) {
-      badge = '<span class="result-fail" title="' + (res.message || '').replace(/"/g, '&quot;') + '">✗ ' + res.message + '</span>';
+      badge = '<span class="result-fail" title="' + (res.message || '').replace(/"/g, '&quot;') + '">✗ ' + esc(res.message) + '</span>';
     } else {
       badge = '<span class="result-fail">✗ 未处理</span>';
     }
-    return '<tr><td style="font-family:SF Mono,Cascadia Code,monospace">' + it.code + '</td><td>' + badge + '</td></tr>';
+    return '<tr><td style="font-family:SF Mono,Cascadia Code,monospace">' + esc(it.code) + '</td><td>' + badge + '</td></tr>';
   }).join('');
   wrap.innerHTML = '<table class="preview-table"><thead><tr><th>代码</th><th>结果</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
