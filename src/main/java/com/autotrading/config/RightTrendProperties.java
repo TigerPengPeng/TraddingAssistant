@@ -19,6 +19,9 @@ public class RightTrendProperties {
     // Provider id used by the daily scheduled jobs. Independent from the
     // frontend's default-provider so changing one does not affect the other.
     private String scheduledProvider = "deepseek";
+    // Volume-anomaly detection for the right-trend email's volume section.
+    private double volumeAnomalyRatio = 2.0;
+    private int volumeAnomalyWindow = 20;
 
     public String getGroupUs() { return groupUs; }
     public void setGroupUs(String groupUs) { this.groupUs = groupUs; }
@@ -34,4 +37,8 @@ public class RightTrendProperties {
     public void setKlineLookback(int klineLookback) { this.klineLookback = klineLookback; }
     public String getScheduledProvider() { return scheduledProvider; }
     public void setScheduledProvider(String scheduledProvider) { this.scheduledProvider = scheduledProvider; }
+    public double getVolumeAnomalyRatio() { return volumeAnomalyRatio; }
+    public void setVolumeAnomalyRatio(double volumeAnomalyRatio) { this.volumeAnomalyRatio = volumeAnomalyRatio; }
+    public int getVolumeAnomalyWindow() { return volumeAnomalyWindow; }
+    public void setVolumeAnomalyWindow(int volumeAnomalyWindow) { this.volumeAnomalyWindow = volumeAnomalyWindow; }
 }

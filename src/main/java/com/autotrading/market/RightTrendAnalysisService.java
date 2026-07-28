@@ -127,6 +127,9 @@ public class RightTrendAnalysisService {
         int fromIndex = Math.max(0, klines.size() - lookback);
         List<KLineService.KLineData> recentKlines = klines.subList(fromIndex, klines.size());
 
+        // Volume anomaly vs prior N-day average (powers the email's volume section).
+        StockTrendResult.VolumeAnomaly volume = computeVolumeAnomaly(recentKlines);
+
         // When no provider is configured at all, fail fast rather than NPE.
         if (resolved == null) {
             log.warn("No LLM provider configured; skipping analysis for {}", stock.key());
@@ -142,7 +145,7 @@ public class RightTrendAnalysisService {
                     stock.key(), stock.getName(), groupName,
                     analysis.isInRightTrend(), analysis.confidence(),
                     analysis.trendDirection(), analysis.keySignals(),
-                    analysis.reason(), true
+                    analysis.reason(), true, volume
             );
             persistRecord(result, tradeDate, resolved.id());
         } else {
@@ -150,6 +153,23 @@ public class RightTrendAnalysisService {
         }
 
         return result;
+    }
+
+    /**
+     * latest-vol / avg(prior `window` bars); anomaly when ratio >= configured threshold.
+     * Returns null when there isn't enough history (window+1 bars) to compute.
+     */
+    private StockTrendResult.VolumeAnomaly computeVolumeAnomaly(List<KLineService.KLineData> klines) {
+        int window = rightTrendProperties.getVolumeAnomalyWindow();
+        if (klines.size() < window + 1) return null;
+        int last = klines.size() - 1;
+        long latestVol = klines.get(last).volume();
+        double avgVol = klines.subList(last - window, last).stream()
+                .mapToLong(KLineService.KLineData::volume).average().orElse(0);
+        double ratio = avgVol > 0 ? (double) latestVol / avgVol : 0;
+        double dayChangePct = klines.get(last).changeRate();
+        boolean anomaly = ratio >= rightTrendProperties.getVolumeAnomalyRatio();
+        return new StockTrendResult.VolumeAnomaly(latestVol, avgVol, ratio, dayChangePct, anomaly);
     }
 
     private void persistRecord(StockTrendResult result, String tradeDate, String providerId) {
@@ -184,11 +204,25 @@ public class RightTrendAnalysisService {
     public record StockTrendResult(String stockKey, String stockName, String groupName,
                                      boolean isInRightTrend, String confidence,
                                      String trendDirection, List<String> keySignals,
-                                     String reason, boolean success) {
+                                     String reason, boolean success,
+                                     VolumeAnomaly volume) {
+
+        public record VolumeAnomaly(long latestVol, double avgVol, double ratio,
+                                     double dayChangePct, boolean anomaly) {}
+
+        // Legacy 9-arg constructor for callers that don't compute volume (tests, etc.)
+        public StockTrendResult(String stockKey, String stockName, String groupName,
+                                 boolean isInRightTrend, String confidence,
+                                 String trendDirection, List<String> keySignals,
+                                 String reason, boolean success) {
+            this(stockKey, stockName, groupName, isInRightTrend, confidence,
+                 trendDirection, keySignals, reason, success, null);
+        }
+
         static StockTrendResult failed(StockInfo stock, String groupName) {
             return new StockTrendResult(stock.key(), stock.getName(), groupName,
                     false, "unknown", "unknown", List.of(),
-                    "Analysis failed", false);
+                    "Analysis failed", false, null);
         }
     }
 }

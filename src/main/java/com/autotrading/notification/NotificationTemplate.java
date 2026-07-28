@@ -308,6 +308,48 @@ public class NotificationTemplate {
             sb.append("</table>");
         }
 
+        // ---- Volume anomaly section (recent trading day) ----
+        var volAnomalies = report.stocks().stream()
+                .filter(s -> s.success() && s.volume() != null && s.volume().anomaly())
+                .sorted((a, b) -> Double.compare(b.volume().ratio(), a.volume().ratio()))
+                .toList();
+        sb.append("<h3 style=\"color:#d29922;margin-top:24px\">⚠ 成交量异常放大（最近交易日）</h3>");
+        if (volAnomalies.isEmpty()) {
+            sb.append("<p style=\"padding:16px;background:#f9fafb;border-radius:8px;text-align:center;color:#8b949e\">")
+              .append("最近交易日无成交量异常放大的股票</p>");
+        } else {
+            sb.append("<p style=\"padding:12px 16px;background:#1a1a2e;border-radius:8px;color:#e6edf3;font-size:14px;margin-bottom:16px\">")
+              .append("共 <strong style=\"color:#d29922\">").append(volAnomalies.size())
+              .append("</strong> 只股票成交量异常放大</p>");
+            sb.append("<table style=\"border-collapse:collapse;width:100%;font-size:13px\">");
+            sb.append("<tr>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">股票</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">分组</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">最新成交量</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">量比</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">当日涨跌</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">方向</th>")
+              .append("</tr>");
+            for (var stock : volAnomalies) {
+                var v = stock.volume();
+                String chgColor = v.dayChangePct() >= 0 ? "#16a34a" : "#dc2626";
+                String direction = v.dayChangePct() >= 0 ? "放量上涨" : "放量下跌";
+                String dayChangeStr = String.format("%s%.2f%%", v.dayChangePct() >= 0 ? "+" : "", v.dayChangePct());
+                String ratioStr = String.format("%.1f×", v.ratio());
+                sb.append("<tr>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-weight:600\">")
+                  .append(stock.stockName())
+                  .append(" <span style=\"color:#8b949e;font-size:12px\">").append(stock.stockKey()).append("</span></td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">").append(stock.groupName()).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">").append(formatVolume(v.latestVol())).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:#dc2626;font-weight:700\">").append(ratioStr).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:").append(chgColor).append("\">").append(dayChangeStr).append("</td>")
+                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-size:12px\">").append(direction).append("</td>")
+                  .append("</tr>");
+            }
+            sb.append("</table>");
+        }
+
         return htmlWrap(sb.toString());
     }
 
@@ -373,6 +415,12 @@ public class NotificationTemplate {
 
     private static String formatPrice(double price) {
         return String.format("%.4f", price);
+    }
+
+    private static String formatVolume(long vol) {
+        if (vol >= 100_000_000) return String.format("%.2f亿", vol / 100_000_000.0);
+        if (vol >= 10_000) return String.format("%.2f万", vol / 10_000.0);
+        return String.valueOf(vol);
     }
 
     private static String marketLabel(int market) {

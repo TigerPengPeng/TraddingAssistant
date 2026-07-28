@@ -69,4 +69,28 @@ class RightTrendNotificationTemplateTest {
         // Failed entries should be filtered out from the table
         assertFalse(html.contains("FAIL"));
     }
+
+    @Test
+    @DisplayName("Volume anomaly section lists only abnormal stocks")
+    void volumeAnomalySection() {
+        var hot = new StockTrendResult("1.00700", "腾讯", "港股", true, "high",
+                "up", List.of(), "confirmed uptrend", true,
+                new StockTrendResult.VolumeAnomaly(124_000_000L, 38_750_000.0, 3.2, 4.8, true));
+        var normal = new StockTrendResult("11.AAPL", "Apple", "美股", false, "medium",
+                "down", List.of(), "not yet reversed", true,
+                new StockTrendResult.VolumeAnomaly(50_000_000L, 48_000_000.0, 1.04, 0.2, false));
+        RightTrendReport report = new RightTrendReport("2026-07-28", List.of("港股", "美股"),
+                List.of(hot, normal), System.currentTimeMillis(), "deepseek", "DeepSeek");
+
+        String body = NotificationTemplate.rightTrendBody(report);
+
+        int volStart = body.indexOf("成交量异常放大");
+        assertTrue(volStart >= 0, "volume section heading should be present");
+        String volSection = body.substring(volStart);
+        assertTrue(volSection.contains("腾讯"), "anomaly stock should be in volume section");
+        assertTrue(volSection.contains("3.2×"), "ratio should be formatted as 3.2×");
+        assertTrue(volSection.contains("+4.80%"), "day change should be formatted with sign");
+        assertTrue(volSection.contains("放量上涨"));
+        assertFalse(volSection.contains("Apple"), "non-anomaly stock must not appear in volume section");
+    }
 }

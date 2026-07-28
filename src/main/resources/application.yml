@@ -85,6 +85,8 @@ right-trend:
   group-cn: ${RIGHT_TREND_GROUP_CN:CN}
   group-add: ${RIGHT_TREND_GROUP_ADD:pool}
   kline-lookback: 60
+  volume-anomaly-ratio: ${RIGHT_TREND_VOLUME_ANOMALY_RATIO:2.0}
+  volume-anomaly-window: ${RIGHT_TREND_VOLUME_ANOMALY_WINDOW:20}
   # Provider for the daily scheduled jobs (09:00 US, 17:00 HK+CN).
   # Decoupled from ai.default-provider so the frontend default can change freely.
   scheduled-provider: ${RIGHT_TREND_SCHEDULED_PROVIDER:deepseek}
