@@ -33,8 +33,8 @@ public class StockAnalysisRecord {
     @Column(length = 2000)
     private String summary;
 
-    @Column(length = 5000)
-    private String rawResult;       // Store full API response
+    @Column(length = 32768)
+    private String rawResult;       // Store full API response (external responses can be ~20KB+)
 
     @Column(nullable = false)
     private Instant createdAt;
