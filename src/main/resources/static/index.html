@@ -315,6 +315,15 @@
 </div>
 
 <div class="top-tab-content" id="tab-config">
+<div style="padding:12px 16px;margin-bottom:12px;border-radius:8px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <div>
+    <div style="font-weight:600">报警规则总开关</div>
+    <div style="font-size:12px;color:var(--text-dim)">关闭后，MA 交叉/跌破 + 波段规则的执行逻辑全部停用（交易信号、邮件系统不受影响）</div>
+  </div>
+  <button class="btn" id="alert-rules-toggle-btn" onclick="toggleAlertRules()" style="min-width:90px">
+    <span id="alert-rules-toggle-label">开启</span>
+  </button>
+</div>
 <div class="section">
   <div class="section-header">
     <span>监控配置</span>
@@ -337,7 +346,7 @@
   </div>
 </div>
 
-<div class="section">
+<div class="section" id="ma-alert-section">
   <div class="section-header">
     <span>MA 报警规则配置</span>
     <div style="display:flex;align-items:center;gap:8px">
@@ -716,6 +725,7 @@ async function refresh() {
     renderAlerts(d.recentAlerts || []);
     renderEmailHistory(d.emailHistory || []);
     updateEmailToggle(d.config.emailEnabled, d.config.emailConfigured);
+    applyAlertRulesToggle(d.config.alertRulesEnabled);
   } catch (e) {
     document.getElementById('conn-dot').className = 'status-dot down';
     document.getElementById('update-time').textContent = 'Fetch failed: ' + e.message;
@@ -771,6 +781,34 @@ function updateEmailToggle(enabled, configured) {
     label.textContent = '邮件关闭';
     btn.style.borderColor = 'rgba(139,148,158,0.4)';
   }
+}
+
+async function toggleAlertRules() {
+  const btn = document.getElementById('alert-rules-toggle-btn');
+  const label = document.getElementById('alert-rules-toggle-label');
+  const next = !(label.textContent.trim() === '开启');
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/alert-rules-toggle', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ enabled: next })
+    });
+    applyAlertRulesToggle((await resp.json()).enabled);
+  } catch(e) {}
+  btn.disabled = false;
+}
+
+function applyAlertRulesToggle(enabled) {
+  const label = document.getElementById('alert-rules-toggle-label');
+  const btn = document.getElementById('alert-rules-toggle-btn');
+  if (!label) return;
+  label.textContent = enabled ? '开启' : '已关闭';
+  btn.style.borderColor = enabled ? 'rgba(63,185,80,0.4)' : 'var(--red)';
+  btn.style.color = enabled ? '' : 'var(--red)';
+  ['fluc-rules','fluc-logic','ma-alert-section'].forEach(function(id){
+    const el = document.getElementById(id);
+    if (el) { el.style.opacity = enabled ? '' : '0.5'; el.style.pointerEvents = enabled ? '' : 'none'; }
+  });
 }
 
 refresh();
