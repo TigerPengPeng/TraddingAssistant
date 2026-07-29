@@ -27,6 +27,7 @@ class MABreakdownScannerTest {
     private QuoteProcessor quoteProcessor;
     private EmailNotificationService emailService;
     private AlertNoiseFilter noiseFilter;
+    private AlertRulesToggle alertRulesToggle;
     private MABreakdownScanner scanner;
 
     private final String stockKey = "11.AAPL";
@@ -39,8 +40,10 @@ class MABreakdownScannerTest {
         FutuProperties props = new FutuProperties();
         noiseFilter = new AlertNoiseFilter(props);
         AlertRecordRepository alertRecordRepository = Mockito.mock(AlertRecordRepository.class);
+        alertRulesToggle = Mockito.mock(AlertRulesToggle.class);
+        when(alertRulesToggle.isEnabled()).thenReturn(true);
         scanner = new MABreakdownScanner(kLineService, quoteProcessor,
-                emailService, noiseFilter, alertRecordRepository, props);
+                emailService, noiseFilter, alertRecordRepository, props, alertRulesToggle);
 
         StockInfo stock = new StockInfo(11, "AAPL", "Apple");
         when(quoteProcessor.getStocks()).thenReturn(List.of(stock));
@@ -89,5 +92,17 @@ class MABreakdownScannerTest {
         assertTrue(items.isEmpty());
 
         verify(emailService, never()).sendMABreakdownReport(anyString(), anyString(), anyList());
+    }
+
+    @Test
+    @DisplayName("alert rules disabled -> scan skipped, no email")
+    void disabledSkipsScan() {
+        when(alertRulesToggle.isEnabled()).thenReturn(false);
+
+        var items = scanner.runScan("test");
+
+        assertTrue(items.isEmpty());
+        verify(emailService, never()).sendMABreakdownReport(anyString(), anyString(), anyList());
+        verify(kLineService, never()).getCloses(anyString());
     }
 }

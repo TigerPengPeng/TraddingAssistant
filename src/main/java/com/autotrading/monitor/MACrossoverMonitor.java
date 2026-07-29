@@ -17,9 +17,11 @@ import java.util.List;
 public class MACrossoverMonitor {
 
     private final MARuleEngine ruleEngine;
+    private final AlertRulesToggle alertRulesToggle;
 
-    public MACrossoverMonitor(MARuleEngine ruleEngine) {
+    public MACrossoverMonitor(MARuleEngine ruleEngine, AlertRulesToggle alertRulesToggle) {
         this.ruleEngine = ruleEngine;
+        this.alertRulesToggle = alertRulesToggle;
     }
 
     /**
@@ -32,6 +34,7 @@ public class MACrossoverMonitor {
      * @return list of MA alert events (empty if none)
      */
     public List<MAEvent> check(String stockKey, String stockName, double price, TradingSession session) {
+        if (!alertRulesToggle.isEnabled()) return List.of();
         return ruleEngine.check(stockKey, stockName, price, session);
     }
 }

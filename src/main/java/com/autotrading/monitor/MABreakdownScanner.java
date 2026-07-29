@@ -40,19 +40,22 @@ public class MABreakdownScanner {
     private final EmailNotificationService emailService;
     private final AlertNoiseFilter noiseFilter;
     private final AlertRecordRepository alertRecordRepository;
+    private final AlertRulesToggle alertRulesToggle;
     private final List<Integer> maPeriods;
 
     public MABreakdownScanner(KLineService kLineService, QuoteProcessor quoteProcessor,
                                EmailNotificationService emailService,
                                AlertNoiseFilter noiseFilter,
                                AlertRecordRepository alertRecordRepository,
-                               FutuProperties properties) {
+                               FutuProperties properties,
+                               AlertRulesToggle alertRulesToggle) {
         this.kLineService = kLineService;
         this.quoteProcessor = quoteProcessor;
         this.emailService = emailService;
         this.noiseFilter = noiseFilter;
         this.alertRecordRepository = alertRecordRepository;
         this.maPeriods = properties.getMonitor().getMaPeriods();
+        this.alertRulesToggle = alertRulesToggle;
     }
 
     @Scheduled(cron = "0 0 10,14 * * MON-FRI", zone = "Asia/Shanghai")
@@ -70,6 +73,10 @@ public class MABreakdownScanner {
      */
     public List<NotificationTemplate.MABreakdownItem> runScan(String label) {
         log.info("MA breakdown scan triggered: {}", label);
+        if (!alertRulesToggle.isEnabled()) {
+            log.info("Alert rules disabled; skipping MA breakdown scan");
+            return List.of();
+        }
 
         Map<String, QuoteProcessor.PriceSnapshot> prices = quoteProcessor.getLatestPrices();
         List<NotificationTemplate.MABreakdownItem> items = new ArrayList<>();

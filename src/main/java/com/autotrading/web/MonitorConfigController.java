@@ -2,6 +2,7 @@ package com.autotrading.web;
 
 import com.autotrading.config.FutuProperties;
 import com.autotrading.config.FutuProperties.FluctuationRule;
+import com.autotrading.monitor.AlertRulesToggle;
 import com.autotrading.monitor.MABreakdownScanner;
 import com.autotrading.monitor.MARuleEngine;
 import com.autotrading.monitor.TimeWindowFluctuationMonitor;
@@ -31,17 +32,20 @@ public class MonitorConfigController {
     private final MABreakdownScanner maBreakdownScanner;
     private final MARuleEngine maRuleEngine;
     private final EmailNotificationService emailNotificationService;
+    private final AlertRulesToggle alertRulesToggle;
 
     public MonitorConfigController(FutuProperties properties,
                                     TimeWindowFluctuationMonitor fluctuationMonitor,
                                     MABreakdownScanner maBreakdownScanner,
                                     MARuleEngine maRuleEngine,
-                                    EmailNotificationService emailNotificationService) {
+                                    EmailNotificationService emailNotificationService,
+                                    AlertRulesToggle alertRulesToggle) {
         this.properties = properties;
         this.fluctuationMonitor = fluctuationMonitor;
         this.maBreakdownScanner = maBreakdownScanner;
         this.maRuleEngine = maRuleEngine;
         this.emailNotificationService = emailNotificationService;
+        this.alertRulesToggle = alertRulesToggle;
     }
 
     // ---- Email Toggle ----
@@ -61,6 +65,25 @@ public class MonitorConfigController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "ok");
         result.put("enabled", emailNotificationService.isEmailEnabled());
+        return result;
+    }
+
+    // ---- Alert Rules Toggle (master switch for MA + fluctuation rule logic) ----
+
+    @GetMapping("/api/alert-rules-toggle")
+    public Map<String, Object> getAlertRulesToggle() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", alertRulesToggle.isEnabled());
+        return result;
+    }
+
+    @PostMapping("/api/alert-rules-toggle")
+    public Map<String, Object> toggleAlertRules(@RequestBody Map<String, Object> body) {
+        boolean enabled = Boolean.TRUE.equals(body.get("enabled"));
+        alertRulesToggle.setEnabled(enabled);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "ok");
+        result.put("enabled", alertRulesToggle.isEnabled());
         return result;
     }
 

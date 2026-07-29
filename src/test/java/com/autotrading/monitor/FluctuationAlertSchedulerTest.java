@@ -28,6 +28,7 @@ class FluctuationAlertSchedulerTest {
     private MarketSessionService sessionService;
     private EmailNotificationService emailService;
     private AlertNoiseFilter noiseFilter;
+    private AlertRulesToggle alertRulesToggle;
     private FluctuationAlertScheduler scheduler;
 
     private final StockInfo stock = new StockInfo(StockInfo.MARKET_US, "AAPL", "Apple");
@@ -40,8 +41,10 @@ class FluctuationAlertSchedulerTest {
         emailService = Mockito.mock(EmailNotificationService.class);
         noiseFilter = new AlertNoiseFilter(new FutuProperties());
         AlertRecordRepository alertRecordRepository = Mockito.mock(AlertRecordRepository.class);
+        alertRulesToggle = Mockito.mock(AlertRulesToggle.class);
+        when(alertRulesToggle.isEnabled()).thenReturn(true);
         scheduler = new FluctuationAlertScheduler(monitor, quoteProcessor,
-                sessionService, emailService, noiseFilter, alertRecordRepository);
+                sessionService, emailService, noiseFilter, alertRecordRepository, alertRulesToggle);
 
         when(quoteProcessor.isMonitoring()).thenReturn(true);
         when(quoteProcessor.getStocks()).thenReturn(List.of(stock));
@@ -100,5 +103,17 @@ class FluctuationAlertSchedulerTest {
         scheduler.evaluateAndAlert();
 
         verify(monitor, never()).evaluate(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("alert rules disabled -> no scan")
+    void disabledNoScan() {
+        when(alertRulesToggle.isEnabled()).thenReturn(false);
+
+        scheduler.evaluateAndAlert();
+
+        verify(monitor, never()).evaluate(anyString(), anyString());
+        verify(emailService, never()).sendFluctuationBatch(anyString(), anyString(),
+                anyString(), anyList());
     }
 }

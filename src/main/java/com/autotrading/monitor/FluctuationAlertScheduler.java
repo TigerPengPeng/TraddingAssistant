@@ -36,23 +36,29 @@ public class FluctuationAlertScheduler {
     private final EmailNotificationService emailService;
     private final AlertNoiseFilter noiseFilter;
     private final AlertRecordRepository alertRecordRepository;
+    private final AlertRulesToggle alertRulesToggle;
 
     public FluctuationAlertScheduler(TimeWindowFluctuationMonitor monitor,
                                       QuoteProcessor quoteProcessor,
                                       MarketSessionService sessionService,
                                       EmailNotificationService emailService,
                                       AlertNoiseFilter noiseFilter,
-                                      AlertRecordRepository alertRecordRepository) {
+                                      AlertRecordRepository alertRecordRepository,
+                                      AlertRulesToggle alertRulesToggle) {
         this.monitor = monitor;
         this.quoteProcessor = quoteProcessor;
         this.sessionService = sessionService;
         this.emailService = emailService;
         this.noiseFilter = noiseFilter;
         this.alertRecordRepository = alertRecordRepository;
+        this.alertRulesToggle = alertRulesToggle;
     }
 
     @Scheduled(fixedDelayString = "${futu.fluctuation.eval-interval-ms:30000}")
     public void evaluateAndAlert() {
+        if (!alertRulesToggle.isEnabled()) {
+            return;
+        }
         if (!quoteProcessor.isMonitoring()) {
             return;
         }
