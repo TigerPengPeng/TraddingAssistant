@@ -46,6 +46,7 @@ public class TradingSignalScanner {
     private final EmailHistoryService emailHistoryService;
     private final AlertNoiseFilter noiseFilter;
     private final AlertRecordRepository alertRecordRepository;
+    private final SignalAlertsToggle signalAlertsToggle;
 
     /** Tracks which signal dedup keys have already been notified. */
     private final Set<String> notifiedKeys = ConcurrentHashMap.newKeySet();
@@ -61,13 +62,15 @@ public class TradingSignalScanner {
                                  EmailNotificationService emailService,
                                  EmailHistoryService emailHistoryService,
                                  AlertNoiseFilter noiseFilter,
-                                 AlertRecordRepository alertRecordRepository) {
+                                 AlertRecordRepository alertRecordRepository,
+                                 SignalAlertsToggle signalAlertsToggle) {
         this.signalService = signalService;
         this.quoteProcessor = quoteProcessor;
         this.emailService = emailService;
         this.emailHistoryService = emailHistoryService;
         this.noiseFilter = noiseFilter;
         this.alertRecordRepository = alertRecordRepository;
+        this.signalAlertsToggle = signalAlertsToggle;
     }
 
     @Scheduled(fixedDelayString = "${futu.monitor.signal-scan-interval-ms:90000}")
@@ -165,7 +168,8 @@ public class TradingSignalScanner {
         for (SignalRecord rec : newSignals) {
             try {
                 String noiseKey = rec.stockKey() + ":" + rec.signalType();
-                boolean shouldEmail = noiseFilter.shouldSendEmail("SIGNAL", noiseKey, System.currentTimeMillis());
+                boolean shouldEmail = noiseFilter.shouldSendEmail("SIGNAL", noiseKey, System.currentTimeMillis())
+                        && signalAlertsToggle.isEnabled();
                 // NR-4: persist all new signals (suppressed or not)
                 alertRecordRepository.save(new AlertRecord("SIGNAL", rec.stockKey(),
                         rec.stockName(), rec.signalType() + " " + rec.strategy(),

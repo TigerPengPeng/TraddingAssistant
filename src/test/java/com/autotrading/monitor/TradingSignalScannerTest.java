@@ -30,6 +30,7 @@ class TradingSignalScannerTest {
     private TradingSignalService signalService;
     private QuoteProcessor quoteProcessor;
     private EmailNotificationService emailService;
+    private SignalAlertsToggle signalAlertsToggle;
     private TradingSignalScanner scanner;
 
     private final StockInfo stock = new StockInfo(StockInfo.MARKET_US, "AAPL", "Apple");
@@ -42,8 +43,10 @@ class TradingSignalScannerTest {
         EmailHistoryService emailHistoryService = Mockito.mock(EmailHistoryService.class);
         AlertNoiseFilter noiseFilter = new AlertNoiseFilter(new FutuProperties());
         AlertRecordRepository alertRecordRepository = Mockito.mock(AlertRecordRepository.class);
+        signalAlertsToggle = Mockito.mock(SignalAlertsToggle.class);
+        when(signalAlertsToggle.isEnabled()).thenReturn(true);
         scanner = new TradingSignalScanner(signalService, quoteProcessor, emailService,
-                emailHistoryService, noiseFilter, alertRecordRepository);
+                emailHistoryService, noiseFilter, alertRecordRepository, signalAlertsToggle);
 
         when(quoteProcessor.isMonitoring()).thenReturn(true);
         when(quoteProcessor.getStocks()).thenReturn(List.of(stock));
@@ -97,6 +100,25 @@ class TradingSignalScannerTest {
         scanner.resetAll();      // clears notifiedKeys + resets initialized
         scanner.scanSignals();   // re-seeds
 
+        verify(emailService, never()).sendSignalAlert(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("signal alerts disabled -> new signal recorded but not emailed")
+    void disabledBlocksSignalEmail() {
+        when(signalAlertsToggle.isEnabled()).thenReturn(false);
+        TradingSignalService.Signal historical = signal(0, "2026-06-20", TradingSignalService.SignalType.BUY);
+        TradingSignalService.Signal fresh = signal(1, "2026-06-26", TradingSignalService.SignalType.SELL);
+
+        when(signalService.getSignals(stock.getMarket(), stock.getCode()))
+                .thenReturn(List.of(historical));
+        scanner.scanSignals();   // seed historical
+
+        when(signalService.getSignals(stock.getMarket(), stock.getCode()))
+                .thenReturn(List.of(historical, fresh));
+        scanner.scanSignals();   // fresh appears, but alerts disabled
+
+        assertEquals(2, scanner.getRecords().size());   // signal still detected + recorded
         verify(emailService, never()).sendSignalAlert(anyString(), anyString());
     }
 }

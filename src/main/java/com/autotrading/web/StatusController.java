@@ -9,6 +9,7 @@ import com.autotrading.model.StockInfo;
 import com.autotrading.startup.QuoteProcessor;
 import com.autotrading.monitor.AlertCoordinator;
 import com.autotrading.monitor.AlertRulesToggle;
+import com.autotrading.monitor.SignalAlertsToggle;
 import com.autotrading.monitor.TradingSignalScanner;
 import com.autotrading.notification.EmailHistoryService;
 import com.autotrading.notification.EmailNotificationService;
@@ -40,6 +41,7 @@ public class StatusController {
     private final SnapshotPollingService snapshotPollingService;
     private final EmailNotificationService emailNotificationService;
     private final AlertRulesToggle alertRulesToggle;
+    private final SignalAlertsToggle signalAlertsToggle;
 
     public StatusController(FutuConnectionManager connectionManager,
                             FutuProperties properties,
@@ -51,7 +53,8 @@ public class StatusController {
                             TradingSignalScanner signalScanner,
                             SnapshotPollingService snapshotPollingService,
                             EmailNotificationService emailNotificationService,
-                            AlertRulesToggle alertRulesToggle) {
+                            AlertRulesToggle alertRulesToggle,
+                            SignalAlertsToggle signalAlertsToggle) {
         this.connectionManager = connectionManager;
         this.properties = properties;
         this.quoteProcessor = quoteProcessor;
@@ -63,6 +66,7 @@ public class StatusController {
         this.snapshotPollingService = snapshotPollingService;
         this.emailNotificationService = emailNotificationService;
         this.alertRulesToggle = alertRulesToggle;
+        this.signalAlertsToggle = signalAlertsToggle;
     }
 
     @GetMapping("/api/status")
@@ -94,6 +98,7 @@ public class StatusController {
         cfg.put("emailEnabled", emailNotificationService.isEmailEnabled());
         cfg.put("emailConfigured", emailNotificationService.isConfigured());
         cfg.put("alertRulesEnabled", alertRulesToggle.isEnabled());
+        cfg.put("signalAlertsEnabled", signalAlertsToggle.isEnabled());
         root.put("config", cfg);
 
         // Stocks with latest prices
