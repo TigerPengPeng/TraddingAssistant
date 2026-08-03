@@ -197,11 +197,14 @@ function confidencePill(c) {
   return '<span class="pill ' + cls + '">' + c + '</span>';
 }
 
-function topBottomPill(signal) {
-  if (signal === 'near_top') return '<span class="pill red">接近顶部</span>';
-  if (signal === 'near_bottom') return '<span class="pill green">接近底部</span>';
-  if (signal === 'mid') return '<span class="pill dim">中段</span>';
-  return '<span class="pill dim">-</span>';
+function topBottomPill(signal, reason) {
+  var pill;
+  if (signal === 'near_top') pill = '<span class="pill red">接近顶部</span>';
+  else if (signal === 'near_bottom') pill = '<span class="pill green">接近底部</span>';
+  else if (signal === 'mid') pill = '<span class="pill dim">中段</span>';
+  else pill = '<span class="pill dim">-</span>';
+  if (reason) return pill + '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' + esc(reason) + '</div>';
+  return pill;
 }
 
 function volumeCell(vol) {
@@ -312,7 +315,7 @@ function renderReport(report) {
       '<td class="num"><span class="pill dim">' + esc(s.groupName || '') + '</span></td>' +
       '<td class="num">' + trendPill(s) + '</td>' +
       '<td class="num">' + confidencePill(s.confidence) + '</td>' +
-      '<td class="num">' + topBottomPill(s.topBottomSignal) + '</td>' +
+      '<td class="num">' + topBottomPill(s.topBottomSignal, s.topBottomReason) + '</td>' +
       '<td class="num">' + volumeCell(s.volume) + '</td>' +
       '<td class="signals-cell">' + signals + '</td>' +
       '<td class="reason-cell">' + (s.success ? esc(s.reason || '') : '<span class="fail-text">' + esc(s.reason || '分析失败') + '</span>') + '</td>' +

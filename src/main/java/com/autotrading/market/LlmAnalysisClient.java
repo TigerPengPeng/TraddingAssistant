@@ -155,7 +155,11 @@ public class LlmAnalysisClient {
         sb.append("- isInRightTrend: 布尔值，是否已进入右侧趋势\n");
         sb.append("- confidence: 字符串，置信度(high/medium/low)\n");
         sb.append("- trendDirection: 字符串，趋势方向(up/down/sideways)\n");
-        sb.append("- topBottomSignal: 字符串，根据近期K线形态判断当前价格是否接近阶段性顶部或底部。取值：near_top(接近顶部,如持续上涨后高位滞涨或放量见顶)、near_bottom(接近底部,如持续下跌后缩量企稳)、mid(中段,无明显顶底信号)\n");
+        sb.append("- topBottomSignal: 字符串。严格判定，无强证据时必须选 mid(中段)。取值：\n");
+        sb.append("  · near_top: 近20日涨幅>15% 且出现见顶信号(高位放量滞涨/长上影/连续阴线/乖离MA20过大)\n");
+        sb.append("  · near_bottom: 近20日跌幅>15% 且出现企稳信号(缩量止跌/长下影/底背离/跌破MA20后回落放缓)\n");
+        sb.append("  · mid: 趋势中段，无明显见顶/见底信号(默认值；不确定就选这个，不要轻易判 near_top/near_bottom)\n");
+        sb.append("- topBottomReason: 字符串。引用具体K线证据(日期/价位/成交量)说明 topBottomSignal 的依据；选 mid 时简述为何无顶底信号\n");
         sb.append("- keySignals: 字符串数组，关键信号列表\n");
         sb.append("- reason: 字符串，详细分析原因");
 
@@ -177,6 +181,7 @@ public class LlmAnalysisClient {
             String confidence = analysis.path("confidence").asText("low");
             String trendDirection = analysis.path("trendDirection").asText("sideways");
             String topBottomSignal = analysis.path("topBottomSignal").asText("unknown");
+            String topBottomReason = analysis.path("topBottomReason").asText("");
             String reason = analysis.path("reason").asText("");
 
             List<String> keySignals = new ArrayList<>();
@@ -187,7 +192,7 @@ public class LlmAnalysisClient {
                 }
             }
 
-            return new LlmAnalysis(true, isInRightTrend, confidence, trendDirection, topBottomSignal,
+            return new LlmAnalysis(true, isInRightTrend, confidence, trendDirection, topBottomSignal, topBottomReason,
                     keySignals, reason, null);
         } catch (Exception e) {
             log.error("Failed to parse LLM response for {}: {}", stockKey, e.getMessage());
@@ -227,11 +232,11 @@ public class LlmAnalysisClient {
 
     /** Result of a single LLM analysis. */
     public record LlmAnalysis(boolean success, boolean isInRightTrend, String confidence,
-                                String trendDirection, String topBottomSignal,
+                                String trendDirection, String topBottomSignal, String topBottomReason,
                                 List<String> keySignals, String reason, String error) {
 
         static LlmAnalysis failed(String error) {
-            return new LlmAnalysis(false, false, "low", "unknown", "unknown",
+            return new LlmAnalysis(false, false, "low", "unknown", "unknown", "",
                     List.of(), "", error);
         }
     }

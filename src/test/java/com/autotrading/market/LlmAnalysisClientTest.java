@@ -86,6 +86,7 @@ class LlmAnalysisClientTest {
                 "confidence", "high",
                 "trendDirection", "up",
                 "topBottomSignal", "near_top",
+                "topBottomReason", "近20日涨幅达25%，7月22日高位放量滞涨",
                 "keySignals", List.of("突破MA30", "成交量放大"),
                 "reason", "价格突破所有均线，形成更高的高低点"
         ));
@@ -101,6 +102,7 @@ class LlmAnalysisClientTest {
         assertEquals("high", result.confidence());
         assertEquals("up", result.trendDirection());
         assertEquals("near_top", result.topBottomSignal());
+        assertTrue(result.topBottomReason().contains("放量滞涨"));
         assertEquals(2, result.keySignals().size());
         assertTrue(result.reason().contains("突破"));
     }

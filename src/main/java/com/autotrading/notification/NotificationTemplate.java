@@ -300,7 +300,7 @@ public class NotificationTemplate {
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:")
                   .append(confColor).append(";font-weight:600\">").append(stock.confidence()).append("</td>")
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
-                  .append(topBottomPill(stock.topBottomSignal())).append("</td>")
+                  .append(topBottomCell(stock.topBottomSignal(), stock.topBottomReason())).append("</td>")
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-size:12px\">")
                   .append(stock.keySignals().isEmpty() ? "-" : String.join("、", stock.keySignals()))
                   .append("</td>")
@@ -364,15 +364,25 @@ public class NotificationTemplate {
         };
     }
 
-    /** Colored pill for the LLM top/bottom signal (near_top / near_bottom / mid / unknown). */
-    private static String topBottomPill(String signal) {
-        if (signal == null) return "<span style=\"color:#8b949e\">-</span>";
-        return switch (signal) {
-            case "near_top" -> "<span style=\"color:#dc2626;font-weight:600\">接近顶部</span>";
-            case "near_bottom" -> "<span style=\"color:#16a34a;font-weight:600\">接近底部</span>";
-            case "mid" -> "<span style=\"color:#8b949e\">中段</span>";
-            default -> "<span style=\"color:#8b949e\">-</span>";
-        };
+    /** Colored pill for the LLM top/bottom signal + its evidence reason (below the pill). */
+    private static String topBottomCell(String signal, String reason) {
+        String pill;
+        if (signal == null) {
+            pill = "<span style=\"color:#8b949e\">-</span>";
+        } else {
+            pill = switch (signal) {
+                case "near_top" -> "<span style=\"color:#dc2626;font-weight:600\">接近顶部</span>";
+                case "near_bottom" -> "<span style=\"color:#16a34a;font-weight:600\">接近底部</span>";
+                case "mid" -> "<span style=\"color:#8b949e\">中段</span>";
+                default -> "<span style=\"color:#8b949e\">-</span>";
+            };
+        }
+        StringBuilder cell = new StringBuilder(pill);
+        if (reason != null && !reason.isBlank()) {
+            cell.append("<div style=\"font-size:11px;color:#8b949e;margin-top:2px\">")
+                .append(reason).append("</div>");
+        }
+        return cell.toString();
     }
 
     // ---- Trading Signal ----
