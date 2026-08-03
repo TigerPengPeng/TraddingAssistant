@@ -64,7 +64,7 @@ class RightTrendAnalysisServiceTest {
         when(stockGroupService.getStocksInGroup("港股")).thenReturn(List.of(stock1, stock2));
         when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
         when(llmClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList(), any()))
-                .thenReturn(new LlmAnalysis(true, true, "high", "up",
+                .thenReturn(new LlmAnalysis(true, true, "high", "up", "near_top",
                         List.of("突破MA30"), "confirmed uptrend", null));
 
         RightTrendReport report = service.analyzeGroup("港股");
@@ -85,7 +85,7 @@ class RightTrendAnalysisServiceTest {
         when(llmClient.analyzeRightTrend(eq("Apple"), anyString(), anyString(), anyList(), any()))
                 .thenReturn(LlmAnalysis.failed("API timeout"));
         when(llmClient.analyzeRightTrend(eq("Microsoft"), anyString(), anyString(), anyList(), any()))
-                .thenReturn(new LlmAnalysis(true, true, "medium", "up",
+                .thenReturn(new LlmAnalysis(true, true, "medium", "up", "mid",
                         List.of("higher lows"), "trending up", null));
 
         RightTrendReport report = service.analyzeGroup("美股");

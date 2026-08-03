@@ -145,7 +145,7 @@ public class RightTrendAnalysisService {
                     stock.key(), stock.getName(), groupName,
                     analysis.isInRightTrend(), analysis.confidence(),
                     analysis.trendDirection(), analysis.keySignals(),
-                    analysis.reason(), true, volume
+                    analysis.reason(), true, analysis.topBottomSignal(), volume
             );
             persistRecord(result, tradeDate, resolved.id());
         } else {
@@ -205,6 +205,7 @@ public class RightTrendAnalysisService {
                                      boolean isInRightTrend, String confidence,
                                      String trendDirection, List<String> keySignals,
                                      String reason, boolean success,
+                                     String topBottomSignal,
                                      VolumeAnomaly volume) {
 
         public record VolumeAnomaly(long latestVol, double avgVol, double ratio,
@@ -216,13 +217,13 @@ public class RightTrendAnalysisService {
                                  String trendDirection, List<String> keySignals,
                                  String reason, boolean success) {
             this(stockKey, stockName, groupName, isInRightTrend, confidence,
-                 trendDirection, keySignals, reason, success, null);
+                 trendDirection, keySignals, reason, success, null, null);
         }
 
         static StockTrendResult failed(StockInfo stock, String groupName) {
             return new StockTrendResult(stock.key(), stock.getName(), groupName,
                     false, "unknown", "unknown", List.of(),
-                    "Analysis failed", false, null);
+                    "Analysis failed", false, null, null);
         }
     }
 }

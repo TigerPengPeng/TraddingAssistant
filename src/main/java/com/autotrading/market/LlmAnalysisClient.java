@@ -155,6 +155,7 @@ public class LlmAnalysisClient {
         sb.append("- isInRightTrend: 布尔值，是否已进入右侧趋势\n");
         sb.append("- confidence: 字符串，置信度(high/medium/low)\n");
         sb.append("- trendDirection: 字符串，趋势方向(up/down/sideways)\n");
+        sb.append("- topBottomSignal: 字符串，根据近期K线形态判断当前价格是否接近阶段性顶部或底部。取值：near_top(接近顶部,如持续上涨后高位滞涨或放量见顶)、near_bottom(接近底部,如持续下跌后缩量企稳)、mid(中段,无明显顶底信号)\n");
         sb.append("- keySignals: 字符串数组，关键信号列表\n");
         sb.append("- reason: 字符串，详细分析原因");
 
@@ -175,6 +176,7 @@ public class LlmAnalysisClient {
             boolean isInRightTrend = analysis.path("isInRightTrend").asBoolean(false);
             String confidence = analysis.path("confidence").asText("low");
             String trendDirection = analysis.path("trendDirection").asText("sideways");
+            String topBottomSignal = analysis.path("topBottomSignal").asText("unknown");
             String reason = analysis.path("reason").asText("");
 
             List<String> keySignals = new ArrayList<>();
@@ -185,7 +187,7 @@ public class LlmAnalysisClient {
                 }
             }
 
-            return new LlmAnalysis(true, isInRightTrend, confidence, trendDirection,
+            return new LlmAnalysis(true, isInRightTrend, confidence, trendDirection, topBottomSignal,
                     keySignals, reason, null);
         } catch (Exception e) {
             log.error("Failed to parse LLM response for {}: {}", stockKey, e.getMessage());
@@ -225,11 +227,11 @@ public class LlmAnalysisClient {
 
     /** Result of a single LLM analysis. */
     public record LlmAnalysis(boolean success, boolean isInRightTrend, String confidence,
-                                String trendDirection, List<String> keySignals,
-                                String reason, String error) {
+                                String trendDirection, String topBottomSignal,
+                                List<String> keySignals, String reason, String error) {
 
         static LlmAnalysis failed(String error) {
-            return new LlmAnalysis(false, false, "low", "unknown",
+            return new LlmAnalysis(false, false, "low", "unknown", "unknown",
                     List.of(), "", error);
         }
     }

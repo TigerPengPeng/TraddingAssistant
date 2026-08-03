@@ -85,6 +85,7 @@ class LlmAnalysisClientTest {
                 "isInRightTrend", true,
                 "confidence", "high",
                 "trendDirection", "up",
+                "topBottomSignal", "near_top",
                 "keySignals", List.of("突破MA30", "成交量放大"),
                 "reason", "价格突破所有均线，形成更高的高低点"
         ));
@@ -99,6 +100,7 @@ class LlmAnalysisClientTest {
         assertTrue(result.isInRightTrend());
         assertEquals("high", result.confidence());
         assertEquals("up", result.trendDirection());
+        assertEquals("near_top", result.topBottomSignal());
         assertEquals(2, result.keySignals().size());
         assertTrue(result.reason().contains("突破"));
     }

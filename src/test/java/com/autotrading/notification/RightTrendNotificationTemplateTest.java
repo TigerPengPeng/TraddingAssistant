@@ -74,10 +74,10 @@ class RightTrendNotificationTemplateTest {
     @DisplayName("Volume anomaly section lists only abnormal stocks")
     void volumeAnomalySection() {
         var hot = new StockTrendResult("1.00700", "腾讯", "港股", true, "high",
-                "up", List.of(), "confirmed uptrend", true,
+                "up", List.of(), "confirmed uptrend", true, "near_top",
                 new StockTrendResult.VolumeAnomaly(124_000_000L, 38_750_000.0, 3.2, 4.8, true));
         var normal = new StockTrendResult("11.AAPL", "Apple", "美股", false, "medium",
-                "down", List.of(), "not yet reversed", true,
+                "down", List.of(), "not yet reversed", true, "mid",
                 new StockTrendResult.VolumeAnomaly(50_000_000L, 48_000_000.0, 1.04, 0.2, false));
         RightTrendReport report = new RightTrendReport("2026-07-28", List.of("港股", "美股"),
                 List.of(hot, normal), System.currentTimeMillis(), "deepseek", "DeepSeek");
@@ -92,5 +92,6 @@ class RightTrendNotificationTemplateTest {
         assertTrue(volSection.contains("+4.80%"), "day change should be formatted with sign");
         assertTrue(volSection.contains("放量上涨"));
         assertFalse(volSection.contains("Apple"), "non-anomaly stock must not appear in volume section");
+        assertTrue(body.contains("接近顶部"), "top/bottom column should render near_top label");
     }
 }
