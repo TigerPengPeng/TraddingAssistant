@@ -197,6 +197,20 @@ function confidencePill(c) {
   return '<span class="pill ' + cls + '">' + c + '</span>';
 }
 
+function topBottomPill(signal) {
+  if (signal === 'near_top') return '<span class="pill red">接近顶部</span>';
+  if (signal === 'near_bottom') return '<span class="pill green">接近底部</span>';
+  if (signal === 'mid') return '<span class="pill dim">中段</span>';
+  return '<span class="pill dim">-</span>';
+}
+
+function volumeCell(vol) {
+  if (!vol) return '<span class="pill dim">-</span>';
+  var ratio = (vol.ratio || 0).toFixed(1) + '×';
+  if (vol.anomaly) return '<span class="pill red">' + ratio + ' 放量</span>';
+  return '<span class="pill dim">' + ratio + '</span>';
+}
+
 function esc(s) {
   if (s === null || s === undefined) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -298,6 +312,8 @@ function renderReport(report) {
       '<td class="num"><span class="pill dim">' + esc(s.groupName || '') + '</span></td>' +
       '<td class="num">' + trendPill(s) + '</td>' +
       '<td class="num">' + confidencePill(s.confidence) + '</td>' +
+      '<td class="num">' + topBottomPill(s.topBottomSignal) + '</td>' +
+      '<td class="num">' + volumeCell(s.volume) + '</td>' +
       '<td class="signals-cell">' + signals + '</td>' +
       '<td class="reason-cell">' + (s.success ? esc(s.reason || '') : '<span class="fail-text">' + esc(s.reason || '分析失败') + '</span>') + '</td>' +
     '</tr>';
@@ -307,7 +323,7 @@ function renderReport(report) {
     html += '<div class="section"><div class="section-header">' +
       '<span>&#10003; 已进入右侧趋势</span><span class="sub">' + inTrend.length + ' 只</span></div>' +
       '<table><thead><tr>' +
-      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th>关键信号</th><th>分析原因</th>' +
+      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
       '</tr></thead><tbody>' + inTrend.map(stockRow).join('') + '</tbody></table></div>';
   }
 
@@ -315,7 +331,7 @@ function renderReport(report) {
     html += '<div class="section"><div class="section-header">' +
       '<span style="color:var(--text-dim)">&#10007; 尚未确认右侧趋势</span><span class="sub">' + notTrend.length + ' 只</span></div>' +
       '<table><thead><tr>' +
-      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th>关键信号</th><th>分析原因</th>' +
+      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
       '</tr></thead><tbody>' + notTrend.map(stockRow).join('') + '</tbody></table></div>';
   }
 
@@ -323,7 +339,7 @@ function renderReport(report) {
     html += '<div class="section"><div class="section-header">' +
       '<span style="color:var(--red)">分析失败</span><span class="sub">' + failed.length + ' 只</span></div>' +
       '<table><thead><tr>' +
-      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th>关键信号</th><th>分析原因</th>' +
+      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
       '</tr></thead><tbody>' + failed.map(stockRow).join('') + '</tbody></table></div>';
   }
 
