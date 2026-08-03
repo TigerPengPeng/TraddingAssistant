@@ -214,6 +214,12 @@ function volumeCell(vol) {
   return '<span class="pill dim">' + ratio + '</span>';
 }
 
+function formatVolume(vol) {
+  if (vol >= 100000000) return (vol / 100000000).toFixed(2) + '亿';
+  if (vol >= 10000) return (vol / 10000).toFixed(2) + '万';
+  return String(vol);
+}
+
 function esc(s) {
   if (s === null || s === undefined) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -345,6 +351,36 @@ function renderReport(report) {
       '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
       '</tr></thead><tbody>' + failed.map(stockRow).join('') + '</tbody></table></div>';
   }
+
+  // ---- Volume anomaly section (always shown, even when empty) ----
+  var volAnomalies = stocks.filter(function(s) { return s.success && s.volume && s.volume.anomaly; })
+    .sort(function(a, b) { return (b.volume.ratio || 0) - (a.volume.ratio || 0); });
+  html += '<div class="section"><div class="section-header">' +
+    '<span style="color:var(--yellow)">⚠ 成交量异常放大（最近交易日）</span>' +
+    '<span class="sub">' + volAnomalies.length + ' 只</span></div>';
+  if (volAnomalies.length === 0) {
+    html += '<div class="empty-state">最近交易日无成交量异常放大的股票</div>';
+  } else {
+    html += '<table><thead><tr>' +
+      '<th>股票</th><th class="num">最新成交量</th><th class="num">量比</th><th class="num">当日涨跌</th><th>方向</th>' +
+      '</tr></thead><tbody>';
+    volAnomalies.forEach(function(s) {
+      var v = s.volume;
+      var up = v.dayChangePct >= 0;
+      var chgColor = up ? 'var(--green)' : 'var(--red)';
+      var chgStr = (up ? '+' : '') + v.dayChangePct.toFixed(2) + '%';
+      html += '<tr>' +
+        '<td><span class="stock-name">' + esc(s.stockName || s.stockKey) + '</span>' +
+          '<span class="stock-code">' + esc(s.stockKey) + '</span></td>' +
+        '<td class="num">' + formatVolume(v.latestVol) + '</td>' +
+        '<td class="num"><span class="pill red">' + (v.ratio || 0).toFixed(1) + '×</span></td>' +
+        '<td class="num" style="color:' + chgColor + '">' + chgStr + '</td>' +
+        '<td>' + (up ? '放量上涨' : '放量大跌') + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
 
   if (stocks.length === 0) {
     html = '<div class="empty-state">报告中无股票数据</div>';
