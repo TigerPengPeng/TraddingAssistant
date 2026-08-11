@@ -13,7 +13,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
@@ -24,6 +27,9 @@ import java.util.List;
 public class RightTrendAnalysisService {
 
     private static final Logger log = LoggerFactory.getLogger(RightTrendAnalysisService.class);
+
+    /** 右侧趋势列展示的最近交易日数（DB 有记录的最近 N 个不同 tradeDate） */
+    private static final int TREND_HISTORY_DAYS = 7;
 
     private final StockGroupService stockGroupService;
     private final KLineService kLineService;
@@ -122,6 +128,16 @@ public class RightTrendAnalysisService {
             return StockTrendResult.failed(stock, groupName);
         }
 
+        // 最新 bar 日期校验：OpenD 数据源可能延迟缺最新交易日 bar，
+        // 用旧 bar 出报告会导致涨跌幅 / LLM 判断与实际相反（见 staleData）。
+        KLineService.KLineData lastBar = klines.get(klines.size() - 1);
+        long staleDays = staleDays(lastBar);
+        if (staleDays > rightTrendProperties.getMaxStaleDays()) {
+            log.warn("Stale K-line for {}: latest bar {} ({} days old > max {}), skipping analysis",
+                    stock.key(), lastBar.time(), staleDays, rightTrendProperties.getMaxStaleDays());
+            return StockTrendResult.staleData(stock, groupName, lastBar.time());
+        }
+
         // Take last N bars (default 60)
         int lookback = rightTrendProperties.getKlineLookback();
         int fromIndex = Math.max(0, klines.size() - lookback);
@@ -148,6 +164,15 @@ public class RightTrendAnalysisService {
                     analysis.reason(), true, analysis.topBottomSignal(), analysis.topBottomReason(), volume
             );
             persistRecord(result, tradeDate, resolved.id());
+            // 查最近7个交易日历史（persist 后含今天），填入结果用于前端/邮件色块展示
+            List<StockTrendResult.TrendDay> history = buildTrendHistory(stock.key());
+            result = new StockTrendResult(
+                    result.stockKey(), result.stockName(), result.groupName(),
+                    result.isInRightTrend(), result.confidence(),
+                    result.trendDirection(), result.keySignals(),
+                    result.reason(), true, result.topBottomSignal(), result.topBottomReason(),
+                    result.volume(), history
+            );
         } else {
             result = StockTrendResult.failed(stock, groupName);
         }
@@ -186,12 +211,46 @@ public class RightTrendAnalysisService {
         }
     }
 
+    /**
+     * 最近 {@value #TREND_HISTORY_DAYS} 个交易日的趋势序列（左老→右新）。
+     * 复用 {@code findByStockKeyOrderByCreatedAtDesc}（按 createdAt 降序），
+     * 按 tradeDate 分组取每组首条（=当天最新一条），再按日期升序截取最近 N 个。
+     * 不足 N 天时返回已有的；无任何历史返回空表。
+     */
+    private List<StockTrendResult.TrendDay> buildTrendHistory(String stockKey) {
+        List<RightTrendAnalysisRecord> all = repository.findByStockKeyOrderByCreatedAtDesc(stockKey);
+        LinkedHashMap<String, Boolean> latestByDate = new LinkedHashMap<>();
+        for (RightTrendAnalysisRecord r : all) {
+            latestByDate.putIfAbsent(r.getTradeDate(), r.getIsInRightTrend());
+        }
+        List<String> dates = new ArrayList<>(latestByDate.keySet());
+        Collections.sort(dates); // yyyy-MM-dd 字典序即日期升序
+        int from = Math.max(0, dates.size() - TREND_HISTORY_DAYS);
+        List<StockTrendResult.TrendDay> history = new ArrayList<>();
+        for (String d : dates.subList(from, dates.size())) {
+            history.add(new StockTrendResult.TrendDay(d, latestByDate.get(d)));
+        }
+        return history;
+    }
+
     private String marketLabel(int market) {
         if (market == StockInfo.MARKET_US) return "美股";
         if (market == StockInfo.MARKET_HK) return "港股";
         if (market == StockInfo.MARKET_CN_SH) return "A股(沪)";
         if (market == StockInfo.MARKET_CN_SZ) return "A股(深)";
         return "M" + market;
+    }
+
+    /** 最新 bar 距今天数（日历日）；time 形如 "2026-08-07" 或 "2026-08-07 00:00:00"。解析失败返回 0（不阻断）。 */
+    private long staleDays(KLineService.KLineData lastBar) {
+        try {
+            String t = lastBar.time();
+            String datePart = t.length() >= 10 ? t.substring(0, 10) : t;
+            return ChronoUnit.DAYS.between(LocalDate.parse(datePart), LocalDate.now());
+        } catch (Exception e) {
+            log.warn("Failed to parse K-line time [{}] for staleness check: {}", lastBar.time(), e.getMessage());
+            return 0;
+        }
     }
 
     // ---- DTOs ----
@@ -206,10 +265,26 @@ public class RightTrendAnalysisService {
                                      String trendDirection, List<String> keySignals,
                                      String reason, boolean success,
                                      String topBottomSignal, String topBottomReason,
-                                     VolumeAnomaly volume) {
+                                     VolumeAnomaly volume,
+                                     List<TrendDay> trendHistory) {
 
         public record VolumeAnomaly(long latestVol, double avgVol, double ratio,
                                      double dayChangePct, boolean anomaly) {}
+
+        /** 单日趋势点：date=yyyy-MM-dd（tradeDate），isInRightTrend=当日是否进入右侧趋势 */
+        public record TrendDay(String date, boolean isInRightTrend) {}
+
+        // Legacy 12-arg constructor (volume but no trendHistory)
+        public StockTrendResult(String stockKey, String stockName, String groupName,
+                                 boolean isInRightTrend, String confidence,
+                                 String trendDirection, List<String> keySignals,
+                                 String reason, boolean success,
+                                 String topBottomSignal, String topBottomReason,
+                                 VolumeAnomaly volume) {
+            this(stockKey, stockName, groupName, isInRightTrend, confidence,
+                 trendDirection, keySignals, reason, success,
+                 topBottomSignal, topBottomReason, volume, null);
+        }
 
         // Legacy 9-arg constructor for callers that don't compute volume (tests, etc.)
         public StockTrendResult(String stockKey, String stockName, String groupName,
@@ -217,13 +292,20 @@ public class RightTrendAnalysisService {
                                  String trendDirection, List<String> keySignals,
                                  String reason, boolean success) {
             this(stockKey, stockName, groupName, isInRightTrend, confidence,
-                 trendDirection, keySignals, reason, success, null, null, null);
+                 trendDirection, keySignals, reason, success, null, null, null, null);
         }
 
         static StockTrendResult failed(StockInfo stock, String groupName) {
             return new StockTrendResult(stock.key(), stock.getName(), groupName,
                     false, "unknown", "unknown", List.of(),
-                    "Analysis failed", false, null, null, null);
+                    "Analysis failed", false, null, null, null, null);
+        }
+
+        /** K 线数据过旧（最新 bar 非最近预期交易日）→ 不喂 LLM，标记跳过。 */
+        static StockTrendResult staleData(StockInfo stock, String groupName, String latestBarDate) {
+            return new StockTrendResult(stock.key(), stock.getName(), groupName,
+                    false, "unknown", "unknown", List.of(),
+                    "K线数据过旧（最新 " + latestBarDate + "），已跳过分析", false, null, null, null, null);
         }
     }
 }

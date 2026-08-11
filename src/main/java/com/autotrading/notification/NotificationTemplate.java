@@ -256,16 +256,14 @@ public class NotificationTemplate {
           .append(" 只股票，其中 <span style=\"color:#16a34a;font-weight:700\">").append(inTrend)
           .append("</span> 只已进入右侧趋势</p>");
 
-        var sorted = report.stocks().stream()
+        // 保持 Futu 账户自选股顺序：report.stocks() 已是账户顺序
+        //（analyzeGroups 按 getStocksInGroup 返回顺序追加）。仅过滤失败条目，
+        // 不再按「右侧趋势优先 + 置信度」重排。
+        var listed = report.stocks().stream()
                 .filter(s -> s.success())
-                .sorted((a, b) -> {
-                    if (a.isInRightTrend() != b.isInRightTrend())
-                        return a.isInRightTrend() ? -1 : 1;
-                    return confidenceRank(b.confidence()) - confidenceRank(a.confidence());
-                })
                 .toList();
 
-        if (sorted.isEmpty()) {
+        if (listed.isEmpty()) {
             sb.append("<p style=\"padding:20px;background:#f9fafb;border-radius:8px;text-align:center\">")
               .append("本次分析无有效结果</p>");
         } else {
@@ -278,10 +276,8 @@ public class NotificationTemplate {
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">关键信号</th>")
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">分析原因</th></tr>");
 
-            for (var stock : sorted) {
-                String trendIcon = stock.isInRightTrend()
-                        ? "<span style=\"color:#16a34a;font-weight:700\">是</span>"
-                        : "<span style=\"color:#dc2626\">否</span>";
+            for (var stock : listed) {
+                String trendCell = trendStripHtml(stock.trendHistory(), stock.isInRightTrend());
                 String confColor = switch (stock.confidence()) {
                     case "high" -> "#16a34a";
                     case "medium" -> "#d29922";
@@ -296,7 +292,7 @@ public class NotificationTemplate {
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
                   .append(stock.groupName()).append("</td>")
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
-                  .append(trendIcon).append("</td>")
+                  .append(trendCell).append("</td>")
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:")
                   .append(confColor).append(";font-weight:600\">").append(stock.confidence()).append("</td>")
                   .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
@@ -356,12 +352,29 @@ public class NotificationTemplate {
         return htmlWrap(sb.toString());
     }
 
-    private static int confidenceRank(String confidence) {
-        return switch (confidence) {
-            case "high" -> 3;
-            case "medium" -> 2;
-            default -> 1;
-        };
+    /**
+     * 最近7日右侧趋势色块条（嵌套 table，邮件客户端兼容）：
+     * 每格一个绿(进入)/红(未进入) td，下方标 MM-dd；历史为空时回退为单字「是/否」。
+     */
+    private static String trendStripHtml(
+            java.util.List<com.autotrading.market.RightTrendAnalysisService.StockTrendResult.TrendDay> history,
+            boolean currentInTrend) {
+        if (history == null || history.isEmpty()) {
+            return currentInTrend
+                    ? "<span style=\"color:#16a34a;font-weight:700\">是</span>"
+                    : "<span style=\"color:#dc2626\">否</span>";
+        }
+        StringBuilder sb = new StringBuilder("<table style=\"border-collapse:collapse;margin:0 auto\"><tr>");
+        for (com.autotrading.market.RightTrendAnalysisService.StockTrendResult.TrendDay d : history) {
+            String date = d.date();
+            String mmdd = (date != null && date.length() >= 10) ? date.substring(5) : (date == null ? "" : date);
+            String bg = d.isInRightTrend() ? "#16a34a" : "#dc2626";
+            sb.append("<td style=\"padding:3px 5px;border:1px solid #fff;text-align:center;background:")
+              .append(bg).append(";color:#fff;font-size:11px;line-height:1.15;min-width:34px\">")
+              .append(d.isInRightTrend() ? "✓" : "✗").append("<br>").append(mmdd).append("</td>");
+        }
+        sb.append("</tr></table>");
+        return sb.toString();
     }
 
     /** Colored pill for the LLM top/bottom signal + its evidence reason (below the pill). */

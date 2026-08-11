@@ -147,6 +147,17 @@
   .stock-name { font-weight: 600; }
   .stock-code { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
   .fail-text { color: var(--red); font-style: italic; }
+  /* 右侧趋势列：最近 7 日色块条（左老→右新），与邮件同款 */
+  .trend-strip { display: inline-flex; gap: 2px; }
+  .trend-cell {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 34px; padding: 2px 4px; border-radius: 4px;
+    font-size: 11px; line-height: 1.15; color: #fff;
+  }
+  .trend-cell.trend-yes { background: var(--green); }
+  .trend-cell.trend-no { background: var(--red); }
+  .trend-mark { font-weight: 700; }
+  .trend-date { font-size: 10px; opacity: 0.92; }
 </style>
 </head>
 <body>
@@ -187,8 +198,20 @@ function fmtTime(ts) {
 
 function trendPill(r) {
   if (!r.success) return '<span class="pill dim">分析失败</span>';
-  if (r.isInRightTrend) return '<span class="pill green">&#10003; 右侧</span>';
-  return '<span class="pill red">&#10007; 未确认</span>';
+  var h = r.trendHistory || [];
+  if (h.length === 0) {
+    return r.isInRightTrend ? '<span class="pill green">&#10003; 右侧</span>' : '<span class="pill red">&#10007; 未确认</span>';
+  }
+  var cells = h.map(function(d) {
+    var mmdd = d.date && d.date.length >= 10 ? d.date.slice(5) : (d.date || '');
+    var cls = d.isInRightTrend ? 'trend-yes' : 'trend-no';
+    var mark = d.isInRightTrend ? '&#10003;' : '&#10007;';
+    return '<div class="trend-cell ' + cls + '">' +
+      '<span class="trend-mark">' + mark + '</span>' +
+      '<span class="trend-date">' + esc(mmdd) + '</span>' +
+      '</div>';
+  }).join('');
+  return '<div class="trend-strip">' + cells + '</div>';
 }
 
 function confidencePill(c) {
@@ -296,15 +319,14 @@ async function analyze() {
 
 function renderReport(report) {
   var stocks = report.stocks || [];
-  var inTrend = stocks.filter(function(s) { return s.isInRightTrend; });
-  var notTrend = stocks.filter(function(s) { return !s.isInRightTrend && s.success; });
-  var failed = stocks.filter(function(s) { return !s.success; });
+  // 汇总用：已进入右侧趋势（仅统计成功分析的）；展示不再区分趋势/失败分组
+  var inTrendCount = stocks.filter(function(s) { return s.isInRightTrend && s.success; }).length;
 
   var html = '<div class="summary-box">' +
     '<div>' +
       '<div class="meta">' + (report.providerLabel ? esc(report.providerLabel) + ' · ' : '') + (report.groupNames || []).map(esc).join(' + ') + ' &middot; ' + esc(report.date) + '</div>' +
       '<div style="margin-top:4px">' +
-        '<span class="count green">' + inTrend.length + '</span> <span style="color:var(--text-dim)">已进入右侧</span>' +
+        '<span class="count green">' + inTrendCount + '</span> <span style="color:var(--text-dim)">已进入右侧</span>' +
         ' &nbsp;/&nbsp; <span class="count">' + stocks.length + '</span> <span style="color:var(--text-dim)">只股票</span>' +
       '</div>' +
     '</div>' +
@@ -328,28 +350,14 @@ function renderReport(report) {
     '</tr>';
   }
 
-  if (inTrend.length > 0) {
+  // 主表：所有股票按 Futu 账户顺序展示，不再区分「已进入右侧/尚未确认/失败」分组。
+  // 失败条目仍保留在表中（stockRow 以红字「分析失败」标注），便于对照账户自选股。
+  if (stocks.length > 0) {
     html += '<div class="section"><div class="section-header">' +
-      '<span>&#10003; 已进入右侧趋势</span><span class="sub">' + inTrend.length + ' 只</span></div>' +
+      '<span>股票分析（按账户顺序）</span><span class="sub">' + stocks.length + ' 只</span></div>' +
       '<table><thead><tr>' +
       '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
-      '</tr></thead><tbody>' + inTrend.map(stockRow).join('') + '</tbody></table></div>';
-  }
-
-  if (notTrend.length > 0) {
-    html += '<div class="section"><div class="section-header">' +
-      '<span style="color:var(--text-dim)">&#10007; 尚未确认右侧趋势</span><span class="sub">' + notTrend.length + ' 只</span></div>' +
-      '<table><thead><tr>' +
-      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
-      '</tr></thead><tbody>' + notTrend.map(stockRow).join('') + '</tbody></table></div>';
-  }
-
-  if (failed.length > 0) {
-    html += '<div class="section"><div class="section-header">' +
-      '<span style="color:var(--red)">分析失败</span><span class="sub">' + failed.length + ' 只</span></div>' +
-      '<table><thead><tr>' +
-      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
-      '</tr></thead><tbody>' + failed.map(stockRow).join('') + '</tbody></table></div>';
+      '</tr></thead><tbody>' + stocks.map(stockRow).join('') + '</tbody></table></div>';
   }
 
   // ---- Volume anomaly section (always shown, even when empty) ----

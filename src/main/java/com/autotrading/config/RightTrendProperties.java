@@ -22,6 +22,9 @@ public class RightTrendProperties {
     // Volume-anomaly detection for the right-trend email's volume section.
     private double volumeAnomalyRatio = 2.0;
     private int volumeAnomalyWindow = 20;
+    // 最新的 K 线 bar 距今超过该日历日数 → 视为数据过旧，跳过该股分析
+    // （防 OpenD 数据源延迟导致用上一交易日 bar 出错误报告）
+    private int maxStaleDays = 3;
 
     public String getGroupUs() { return groupUs; }
     public void setGroupUs(String groupUs) { this.groupUs = groupUs; }
@@ -41,4 +44,6 @@ public class RightTrendProperties {
     public void setVolumeAnomalyRatio(double volumeAnomalyRatio) { this.volumeAnomalyRatio = volumeAnomalyRatio; }
     public int getVolumeAnomalyWindow() { return volumeAnomalyWindow; }
     public void setVolumeAnomalyWindow(int volumeAnomalyWindow) { this.volumeAnomalyWindow = volumeAnomalyWindow; }
+    public int getMaxStaleDays() { return maxStaleDays; }
+    public void setMaxStaleDays(int maxStaleDays) { this.maxStaleDays = maxStaleDays; }
 }

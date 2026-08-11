@@ -34,10 +34,32 @@ class RightTrendNotificationTemplateTest {
         assertTrue(html.contains("阿里"));
         assertTrue(html.contains("1"));
         assertTrue(html.contains("突破MA30"));
-        // Right-trend stock should appear before non-trend stock
+        // 腾讯在账户顺序里本就先于阿里（此处也恰好是趋势股）
         int tencentPos = html.indexOf("腾讯");
         int aliPos = html.indexOf("阿里");
-        assertTrue(tencentPos < aliPos, "Right-trend stocks should appear first");
+        assertTrue(tencentPos < aliPos, "账户顺序保持：腾讯(在前) 先于 阿里(在后)");
+    }
+
+    @Test
+    @DisplayName("按 Futu 账户顺序展示，不因「右侧趋势」重排")
+    void preservesAccountOrder() {
+        // 账户顺序：阿里(非趋势, 在前) → 腾讯(趋势, 在后)
+        // 旧的「趋势优先」会把腾讯提到阿里前；按账户顺序应保持阿里在前
+        List<StockTrendResult> stocks = List.of(
+                new StockTrendResult("2.09988", "阿里", "港股", false, "medium",
+                        "down", List.of("仍在MA30下方"), "not yet reversed", true),
+                new StockTrendResult("2.00700", "腾讯", "港股", true, "high",
+                        "up", List.of("突破MA30"), "confirmed uptrend", true)
+        );
+        RightTrendReport report = new RightTrendReport("2025-07-13",
+                List.of("港股"), stocks, System.currentTimeMillis(), "deepseek", "DeepSeek");
+
+        String html = NotificationTemplate.rightTrendBody(report);
+
+        int aliPos = html.indexOf("阿里");
+        int tencentPos = html.indexOf("腾讯");
+        assertTrue(aliPos > 0 && tencentPos > 0, "两只股票都应渲染");
+        assertTrue(aliPos < tencentPos, "账户顺序：阿里(账户内在前) 应先于 腾讯(在后)，不因右侧趋势重排");
     }
 
     @Test
@@ -93,5 +115,31 @@ class RightTrendNotificationTemplateTest {
         assertTrue(volSection.contains("放量上涨"));
         assertFalse(volSection.contains("Apple"), "non-anomaly stock must not appear in volume section");
         assertTrue(body.contains("接近顶部"), "top/bottom column should render near_top label");
+    }
+
+    @Test
+    @DisplayName("右侧趋势列渲染最近7日色块条（含 MM-dd 日期与绿/红）")
+    void rightTrendColumnRenders7DayStrip() {
+        List<StockTrendResult.TrendDay> history = List.of(
+                new StockTrendResult.TrendDay("2026-08-04", true),
+                new StockTrendResult.TrendDay("2026-08-05", true),
+                new StockTrendResult.TrendDay("2026-08-06", false),
+                new StockTrendResult.TrendDay("2026-08-07", true)
+        );
+        StockTrendResult stock = new StockTrendResult(
+                "2.00700", "腾讯", "港股", true, "high", "up",
+                List.of("突破MA30"), "confirmed uptrend", true,
+                null, null, null, history);
+        RightTrendReport report = new RightTrendReport("2026-08-07",
+                List.of("港股"), List.of(stock), System.currentTimeMillis(), "deepseek", "DeepSeek");
+
+        String html = NotificationTemplate.rightTrendBody(report);
+
+        assertTrue(html.contains("08-04") && html.contains("08-05")
+                && html.contains("08-06") && html.contains("08-07"), "每个交易日 MM-dd 都渲染");
+        assertTrue(html.contains("#16a34a"), "绿色块（进入右侧）");
+        assertTrue(html.contains("#dc2626"), "红色块（未进入）");
+        assertTrue(html.contains("<table style=\"border-collapse:collapse;margin:0 auto\">"),
+                "色块条嵌套 table");
     }
 }
