@@ -115,6 +115,39 @@ public class RightTrendAnalysisService {
         return report;
     }
 
+    /**
+     * 补偿调度器重试入口：从 DB 待补偿记录重建 StockInfo，复用 analyzeSingleStock 全流程
+     * （K线校验 + stale + LLM + persistRecord）。
+     *
+     * <p>落库策略：补偿器在调用前**删除原失败记录**，本方法重新 insert 一条新记录
+     * （status 反映本次重试结果）。成功时新记录 DONE，同 tradeDate 旧 DONE 被 SUPERSEDED。
+     * STALE 超期由补偿器直接 update 原记录为 FAILED（不调用本方法）。
+     */
+    public StockTrendResult retryStock(RightTrendAnalysisRecord record, String providerId) {
+        AiProviderProperties.Resolved resolved = aiProviderProperties.resolve(providerId);
+        StockInfo stock = stockInfoFromKey(record.getStockKey(), record.getStockName());
+        if (stock == null) {
+            log.warn("Cannot retry {}: bad stockKey {}", record.getStockKey(), record.getStockKey());
+            return StockTrendResult.failed(
+                    new StockInfo(11, record.getStockKey(), record.getStockName()), record.getGroupName());
+        }
+        return analyzeSingleStock(stock, record.getGroupName(), record.getTradeDate(), resolved);
+    }
+
+    /** "market.code" → StockInfo；解析失败返回 null。 */
+    private StockInfo stockInfoFromKey(String stockKey, String stockName) {
+        if (stockKey == null) return null;
+        int dot = stockKey.indexOf('.');
+        if (dot <= 0 || dot >= stockKey.length() - 1) return null;
+        try {
+            int market = Integer.parseInt(stockKey.substring(0, dot));
+            String code = stockKey.substring(dot + 1);
+            return new StockInfo(market, code, stockName);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     private StockTrendResult analyzeSingleStock(StockInfo stock, String groupName, String tradeDate,
                                                   AiProviderProperties.Resolved resolved) {
         String marketLabel = marketLabel(stock.getMarket());
@@ -125,7 +158,10 @@ public class RightTrendAnalysisService {
         List<KLineService.KLineData> klines = kLineService.getOrFetchKLines(stock);
         if (klines.isEmpty()) {
             log.warn("No K-line data for {} (cache miss + API failed/quota)", stock.key());
-            return StockTrendResult.failed(stock, groupName);
+            StockTrendResult failed = StockTrendResult.failed(stock, groupName);
+            persistRecord(failed, tradeDate, resolved == null ? null : resolved.id(),
+                    "FAILED", "K线拉取失败（限流/无权限/不支持）");
+            return failed;
         }
 
         // 最新 bar 日期校验：OpenD 数据源可能延迟缺最新交易日 bar，
@@ -135,7 +171,10 @@ public class RightTrendAnalysisService {
         if (staleDays > rightTrendProperties.getMaxStaleDays()) {
             log.warn("Stale K-line for {}: latest bar {} ({} days old > max {}), skipping analysis",
                     stock.key(), lastBar.time(), staleDays, rightTrendProperties.getMaxStaleDays());
-            return StockTrendResult.staleData(stock, groupName, lastBar.time());
+            StockTrendResult stale = StockTrendResult.staleData(stock, groupName, lastBar.time());
+            persistRecord(stale, tradeDate, resolved == null ? null : resolved.id(),
+                    "STALE", "K线最新bar=" + lastBar.time().substring(0, 10) + " 距今" + staleDays + "天");
+            return stale;
         }
 
         // Take last N bars (default 60)
@@ -149,7 +188,9 @@ public class RightTrendAnalysisService {
         // When no provider is configured at all, fail fast rather than NPE.
         if (resolved == null) {
             log.warn("No LLM provider configured; skipping analysis for {}", stock.key());
-            return StockTrendResult.failed(stock, groupName);
+            StockTrendResult failed = StockTrendResult.failed(stock, groupName);
+            persistRecord(failed, tradeDate, null, "FAILED", "未配置LLM供应商");
+            return failed;
         }
 
         LlmAnalysisClient.LlmAnalysis analysis = llmClient.analyzeRightTrend(
@@ -163,7 +204,7 @@ public class RightTrendAnalysisService {
                     analysis.trendDirection(), analysis.keySignals(),
                     analysis.reason(), true, analysis.topBottomSignal(), analysis.topBottomReason(), volume
             );
-            persistRecord(result, tradeDate, resolved.id());
+            persistRecord(result, tradeDate, resolved.id(), "DONE", null);
             // 查最近7个交易日历史（persist 后含今天），填入结果用于前端/邮件色块展示
             List<StockTrendResult.TrendDay> history = buildTrendHistory(stock.key());
             result = new StockTrendResult(
@@ -174,7 +215,10 @@ public class RightTrendAnalysisService {
                     result.volume(), history
             );
         } else {
+            log.warn("LLM analysis failed for {}", stock.key());
             result = StockTrendResult.failed(stock, groupName);
+            persistRecord(result, tradeDate, resolved.id(), "ANALYSIS_FAILED",
+                    "LLM返回失败：" + (analysis.reason() == null ? "未知" : analysis.reason()));
         }
 
         return result;
@@ -198,16 +242,43 @@ public class RightTrendAnalysisService {
     }
 
     private void persistRecord(StockTrendResult result, String tradeDate, String providerId) {
+        persistRecord(result, tradeDate, providerId,
+                result.success() ? "DONE" : "FAILED", null);
+    }
+
+    /** 落库（含 status + errorMessage）；成功时同时把同 tradeDate 旧记录置 SUPERSEDED。 */
+    private void persistRecord(StockTrendResult result, String tradeDate, String providerId,
+                                 String status, String errorMessage) {
         try {
             RightTrendAnalysisRecord record = new RightTrendAnalysisRecord(
                     result.groupName(), result.stockKey(), result.stockName(),
                     tradeDate, result.isInRightTrend(), result.confidence(),
                     result.trendDirection(), String.join("; ", result.keySignals()),
-                    result.reason(), providerId
+                    result.reason(), providerId, status, 0, null, errorMessage
             );
             repository.save(record);
+            if ("DONE".equals(status)) {
+                markSuperseded(result.stockKey(), tradeDate, record.getId());
+            }
         } catch (Exception e) {
             log.warn("Failed to persist analysis record for {}: {}", result.stockKey(), e.getMessage());
+        }
+    }
+
+    /** 同 tradeDate 同股的旧 DONE 记录置 SUPERSEDED（成功被更新记录取代，一天取最新）。 */
+    private void markSuperseded(String stockKey, String tradeDate, Long exceptId) {
+        try {
+            List<RightTrendAnalysisRecord> existing =
+                    repository.findByStockKeyAndTradeDateOrderByCreatedAtDesc(stockKey, tradeDate);
+            for (RightTrendAnalysisRecord r : existing) {
+                if (exceptId != null && exceptId.equals(r.getId())) continue;
+                if ("DONE".equals(r.getStatus())) {
+                    r.setStatus("SUPERSEDED");
+                    repository.save(r);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to mark superseded for {} {}: {}", stockKey, tradeDate, e.getMessage());
         }
     }
 

@@ -26,6 +26,18 @@ public class RightTrendProperties {
     // （防 OpenD 数据源延迟导致用上一交易日 bar 出错误报告）
     private int maxStaleDays = 3;
 
+    // ---- 自动补偿（compensation）----
+    /** 补偿调度器是否启用。 */
+    private boolean compensationEnabled = true;
+    /** 补偿调度器扫描间隔（ms，默认 10 分钟）。 */
+    private long compensationIntervalMs = 600_000L;
+    /** 每轮补偿最多重试多少只股票（防饿死 4 线程调度池）。 */
+    private int compensationBatchSize = 10;
+    /** STALE 记录超过该天数仍未成功 → 置 FAILED 放弃（避免下市/停牌股死循环）。 */
+    private int staleTtlDays = 3;
+    /** 同一股票同一 tradeDate 每日最多补发邮件数（避免轰炸）。 */
+    private int compensationMaxPerDay = 1;
+
     public String getGroupUs() { return groupUs; }
     public void setGroupUs(String groupUs) { this.groupUs = groupUs; }
     public String getGroupHk() { return groupHk; }
@@ -46,4 +58,14 @@ public class RightTrendProperties {
     public void setVolumeAnomalyWindow(int volumeAnomalyWindow) { this.volumeAnomalyWindow = volumeAnomalyWindow; }
     public int getMaxStaleDays() { return maxStaleDays; }
     public void setMaxStaleDays(int maxStaleDays) { this.maxStaleDays = maxStaleDays; }
+    public boolean isCompensationEnabled() { return compensationEnabled; }
+    public void setCompensationEnabled(boolean compensationEnabled) { this.compensationEnabled = compensationEnabled; }
+    public long getCompensationIntervalMs() { return compensationIntervalMs; }
+    public void setCompensationIntervalMs(long compensationIntervalMs) { this.compensationIntervalMs = compensationIntervalMs; }
+    public int getCompensationBatchSize() { return compensationBatchSize; }
+    public void setCompensationBatchSize(int compensationBatchSize) { this.compensationBatchSize = compensationBatchSize; }
+    public int getStaleTtlDays() { return staleTtlDays; }
+    public void setStaleTtlDays(int staleTtlDays) { this.staleTtlDays = staleTtlDays; }
+    public int getCompensationMaxPerDay() { return compensationMaxPerDay; }
+    public void setCompensationMaxPerDay(int compensationMaxPerDay) { this.compensationMaxPerDay = compensationMaxPerDay; }
 }

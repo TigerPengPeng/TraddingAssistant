@@ -11,6 +11,7 @@ import com.autotrading.model.StockInfo;
 import com.autotrading.entity.RightTrendAnalysisRecord;
 import com.autotrading.repository.RightTrendAnalysisRecordRepository;
 import org.junit.jupiter.api.*;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
@@ -161,7 +162,7 @@ class RightTrendAnalysisServiceTest {
     }
 
     @Test
-    @DisplayName("最新K线bar过旧时跳过分析并标记（不调LLM、不持久化）")
+    @DisplayName("最新K线bar过旧时跳过分析并标记（不调LLM，但落库STALE供补偿器重试）")
     void skipsStaleKlineData() throws Exception {
         StockInfo stock = new StockInfo(11, "COHR", "Coherent");
         when(stockGroupService.getStocksInGroup("美股")).thenReturn(List.of(stock));
@@ -178,8 +179,11 @@ class RightTrendAnalysisServiceTest {
         assertFalse(r.success(), "标记为非成功");
         assertTrue(r.reason().contains("K线数据过旧"), "reason 标注数据过旧");
         assertTrue(r.reason().contains("2020-01-01"), "reason 含最新 bar 日期");
-        verifyNoInteractions(llmClient);          // 不喂 LLM
-        verify(repository, never()).save(any());  // 不持久化
+        verifyNoInteractions(llmClient);  // 不喂 LLM
+        // 现在 stale 路径落库（status=STALE），供补偿调度器后续重试
+        ArgumentCaptor<RightTrendAnalysisRecord> captor = ArgumentCaptor.forClass(RightTrendAnalysisRecord.class);
+        verify(repository).save(captor.capture());
+        assertEquals("STALE", captor.getValue().getStatus(), "落库 status=STALE");
     }
 
     private RightTrendAnalysisRecord rec(String tradeDate, boolean inTrend) {
