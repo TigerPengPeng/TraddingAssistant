@@ -257,11 +257,9 @@ public class NotificationTemplate {
           .append("</span> 只已进入右侧趋势</p>");
 
         // 保持 Futu 账户自选股顺序：report.stocks() 已是账户顺序
-        //（analyzeGroups 按 getStocksInGroup 返回顺序追加）。仅过滤失败条目，
-        // 不再按「右侧趋势优先 + 置信度」重排。
-        var listed = report.stocks().stream()
-                .filter(s -> s.success())
-                .toList();
+        //（analyzeGroups 按 getStocksInGroup 返回顺序追加）。不再过滤失败条目——
+        // K线拉取失败/数据过旧的股保留在表中（淡红底 + 红字 reason），避免静默丢失。
+        var listed = report.stocks();
 
         if (listed.isEmpty()) {
             sb.append("<p style=\"padding:20px;background:#f9fafb;border-radius:8px;text-align:center\">")
@@ -277,30 +275,37 @@ public class NotificationTemplate {
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">分析原因</th></tr>");
 
             for (var stock : listed) {
-                String trendCell = trendStripHtml(stock.trendHistory(), stock.isInRightTrend());
+                boolean ok = stock.success();
+                String trendCell = ok
+                        ? trendStripHtml(stock.trendHistory(), stock.isInRightTrend())
+                        : "<span style=\"color:#dc2626;font-weight:700\">数据异常</span>";
                 String confColor = switch (stock.confidence()) {
                     case "high" -> "#16a34a";
                     case "medium" -> "#d29922";
                     default -> "#8b949e";
                 };
+                // 失败股（K线拉取失败/数据过旧）整行淡红底，非 reason 列显示 "-"
+                String rowBg = ok ? "" : "background:#fef2f2;";
+                String td = "padding:8px 10px;border:1px solid #e5e7eb;" + rowBg;
 
                 sb.append("<tr>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-weight:600\">")
+                  .append("<td style=\"").append(td).append("font-weight:600\">")
                   .append(stock.stockName())
                   .append(" <span style=\"color:#8b949e;font-size:12px\">")
                   .append(stock.stockKey()).append("</span></td>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
+                  .append("<td style=\"").append(td).append("text-align:center\">")
                   .append(stock.groupName()).append("</td>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
+                  .append("<td style=\"").append(td).append("text-align:center\">")
                   .append(trendCell).append("</td>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center;color:")
-                  .append(confColor).append(";font-weight:600\">").append(stock.confidence()).append("</td>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;text-align:center\">")
-                  .append(topBottomCell(stock.topBottomSignal(), stock.topBottomReason())).append("</td>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-size:12px\">")
-                  .append(stock.keySignals().isEmpty() ? "-" : String.join("、", stock.keySignals()))
+                  .append("<td style=\"").append(td).append("text-align:center;color:")
+                  .append(confColor).append(";font-weight:600\">").append(ok ? stock.confidence() : "-").append("</td>")
+                  .append("<td style=\"").append(td).append("text-align:center\">")
+                  .append(ok ? topBottomCell(stock.topBottomSignal(), stock.topBottomReason()) : "-").append("</td>")
+                  .append("<td style=\"").append(td).append("font-size:12px\">")
+                  .append(ok && !stock.keySignals().isEmpty() ? String.join("、", stock.keySignals()) : "-")
                   .append("</td>")
-                  .append("<td style=\"padding:8px 10px;border:1px solid #e5e7eb;font-size:12px\">")
+                  .append("<td style=\"").append(td).append("font-size:12px;color:")
+                  .append(ok ? "" : "#dc2626").append("\">")
                   .append(stock.reason()).append("</td>")
                   .append("</tr>");
             }

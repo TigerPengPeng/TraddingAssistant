@@ -24,6 +24,10 @@ public class KLineService {
 
     private static final Logger log = LoggerFactory.getLogger(KLineService.class);
     private static final int MAX_KL_COUNT = 120;
+    /** OpenD 历史K线限流（免费档 60 次/30 秒）时的最大重试次数（退避后重试）。 */
+    private static final int MAX_KL_RATELIMIT_RETRIES = 2;
+    /** 限流退避毫秒（OpenD 限流窗口 30 秒，等 5 秒后重试通常可过）。 */
+    private static final long RATELIMIT_BACKOFF_MS = 5_000L;
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     /** Frequency labels used across the app. */
@@ -83,10 +87,26 @@ public class KLineService {
                         .setMaxAckKLNum(MAX_KL_COUNT).build())
                 .build();
 
-        int serial = conn.requestHistoryKL(request);
-        QotRequestHistoryKL.Response response = bridge.await(serial, QotRequestHistoryKL.Response.class);
-        if (response.getRetType() != Common.RetType.RetType_Succeed_VALUE)
-            throw new AsyncRequestBridge.FutuRequestException("RequestHistoryKL failed: " + response.getRetMsg());
+        QotRequestHistoryKL.Response response = null;
+        for (int attempt = 0; ; attempt++) {
+            int serial = conn.requestHistoryKL(request);
+            response = bridge.await(serial, QotRequestHistoryKL.Response.class);
+            if (response.getRetType() == Common.RetType.RetType_Succeed_VALUE) break;
+            String retMsg = response.getRetMsg();
+            // OpenD 限流（60 次/30 秒）属瞬时错误，退避后重试而非直接失败
+            if (isRateLimited(retMsg) && attempt < MAX_KL_RATELIMIT_RETRIES) {
+                log.warn("RequestHistoryKL rate-limited for {} ({}), retry {}/{} after {}ms",
+                        stock.key(), retMsg, attempt + 1, MAX_KL_RATELIMIT_RETRIES, RATELIMIT_BACKOFF_MS);
+                try {
+                    Thread.sleep(RATELIMIT_BACKOFF_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                continue;
+            }
+            throw new AsyncRequestBridge.FutuRequestException("RequestHistoryKL failed: " + retMsg);
+        }
 
         List<KLineData> klines = new ArrayList<>();
         for (KLine kl : response.getS2C().getKlListList()) {
@@ -158,6 +178,13 @@ public class KLineService {
     /** Maps a frequency label to the Futu KL type value. */
     private int klTypeValue(String frequency) {
         return FREQ_WEEK.equalsIgnoreCase(frequency) ? KLType.KLType_Week_VALUE : KLType.KLType_Day_VALUE;
+    }
+
+    /** OpenD 历史K线限流响应识别（"high frequency ... Maximum 60 times per 30 seconds"）。 */
+    static boolean isRateLimited(String retMsg) {
+        if (retMsg == null) return false;
+        return retMsg.contains("high frequency")
+                || (retMsg.contains("Maximum") && retMsg.contains("per"));
     }
 
     /** Cache key namespaces daily (bare) from weekly (prefixed). */

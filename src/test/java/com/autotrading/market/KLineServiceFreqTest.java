@@ -58,4 +58,18 @@ class KLineServiceFreqTest {
         assertTrue(service.getCloses("11.UNKNOWN", "week").isEmpty());
         assertTrue(service.getCloses("11.UNKNOWN").isEmpty());
     }
+
+    @Test
+    @DisplayName("isRateLimited 正确识别 OpenD 限流响应（high frequency / Maximum per）")
+    void testIsRateLimited() {
+        // OpenD 限流原文："...high frequency. Maximum 60 times per 30 seconds."
+        assertTrue(KLineService.isRateLimited("Get Historical Candlestick request failed due to high frequency. Maximum 60 times per 30 seconds."));
+        assertTrue(KLineService.isRateLimited("high frequency"));
+        assertTrue(KLineService.isRateLimited("Maximum 99 times per 60 seconds"));
+        // 非限流错误不应识别为限流（避免无权限/不支持等也触发重试）
+        assertFalse(KLineService.isRateLimited("Insufficient quote permission. Please go to the Quote Store to purchase a quote card."));
+        assertFalse(KLineService.isRateLimited("US stock indices are not supported"));
+        assertFalse(KLineService.isRateLimited(null));
+        assertFalse(KLineService.isRateLimited(""));
+    }
 }

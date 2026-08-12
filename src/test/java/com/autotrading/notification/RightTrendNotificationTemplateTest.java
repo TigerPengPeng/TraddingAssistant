@@ -75,11 +75,11 @@ class RightTrendNotificationTemplateTest {
     }
 
     @Test
-    @DisplayName("Handles failed analysis entries")
+    @DisplayName("失败股保留在表中并红字标注（不再静默过滤）")
     void handlesFailedEntries() {
         List<StockTrendResult> stocks = List.of(
                 new StockTrendResult("11.FAIL", "FAIL", "美股", false, "unknown",
-                        "unknown", List.of(), "Analysis failed", false)
+                        "unknown", List.of(), "K线拉取失败（限流）", false)
         );
 
         RightTrendReport report = new RightTrendReport("2025-07-13",
@@ -88,8 +88,11 @@ class RightTrendNotificationTemplateTest {
         String html = NotificationTemplate.rightTrendBody(report);
 
         assertNotNull(html);
-        // Failed entries should be filtered out from the table
-        assertFalse(html.contains("FAIL"));
+        // 失败股保留在主表（不再被 filter(success) 滤掉），reason 红字标注
+        assertTrue(html.contains("FAIL"), "失败股应保留在表中");
+        assertTrue(html.contains("数据异常"), "右侧趋势列显示「数据异常」");
+        assertTrue(html.contains("#fef2f2"), "失败行淡红底");
+        assertTrue(html.contains("K线拉取失败"), "reason 保留");
     }
 
     @Test
