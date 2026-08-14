@@ -90,7 +90,10 @@ class RightTrendNotificationTemplateTest {
         assertNotNull(html);
         // 失败股保留在主表（不再被 filter(success) 滤掉），reason 红字标注
         assertTrue(html.contains("FAIL"), "失败股应保留在表中");
-        assertTrue(html.contains("数据异常"), "右侧趋势列显示「数据异常」");
+        // 新设计（31f5f53）：趋势列 = 历史成功色块条 + 末尾灰色 ⚠ 异常格，不再是红字「数据异常」
+        assertTrue(html.contains("⚠"), "右侧趋势列末尾追加 ⚠ 异常格");
+        assertTrue(html.contains("异常"), "异常格含「异常」文案");
+        assertTrue(html.contains("background:#8b949e"), "异常格为灰色底");
         assertTrue(html.contains("#fef2f2"), "失败行淡红底");
         assertTrue(html.contains("K线拉取失败"), "reason 保留");
     }
