@@ -22,9 +22,9 @@ public class RightTrendProperties {
     // Volume-anomaly detection for the right-trend email's volume section.
     private double volumeAnomalyRatio = 2.0;
     private int volumeAnomalyWindow = 20;
-    // 最新的 K 线 bar 距今超过该日历日数 → 视为数据过旧，跳过该股分析
-    // （防 OpenD 数据源延迟导致用上一交易日 bar 出错误报告）
-    private int maxStaleDays = 3;
+    // 最新的 K 线 bar 距今超过该日历日数 → 视为数据过旧（兜底判据；主判据是交易日感知）
+    // 1 = 只要不是上一最新交易日的数据就报错（严格模式）
+    private int maxStaleDays = 1;
 
     // ---- 自动补偿（compensation）----
     /** 补偿调度器是否启用。 */

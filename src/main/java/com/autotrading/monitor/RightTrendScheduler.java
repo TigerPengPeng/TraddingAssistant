@@ -37,12 +37,17 @@ public class RightTrendScheduler {
         this.properties = properties;
     }
 
-   @Scheduled(cron = "0 0 9 * * MON-FRI", zone = "Asia/Shanghai")
+   /**
+    * US 分析：美股收盘（16:00 ET）后 1 小时 = 17:00 America/New_York。
+    * zone 用美东时区，cron 自动适应冬夏令时（夏令时=北京 05:00，冬令时=北京 06:00）。
+    */
+   @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "America/New_York")
    public void analyzeUS() {
-       log.info("Scheduled right-trend analysis: US stocks at 09:00");
+       log.info("Scheduled right-trend analysis: US stocks at 17:00 ET (1h after close)");
         runAnalysis(List.of(properties.getGroupUs()), true, properties.getScheduledProvider());
    }
 
+   /** HK + CN 分析：港股收盘（16:00 北京）后 1 小时 = 17:00 Asia/Shanghai。 */
    @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Shanghai")
    public void analyzeHKAndCN() {
        log.info("Scheduled right-trend analysis: HK + CN stocks at 17:00");
