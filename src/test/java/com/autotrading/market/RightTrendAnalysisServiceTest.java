@@ -186,6 +186,32 @@ class RightTrendAnalysisServiceTest {
         assertEquals("STALE", captor.getValue().getStatus(), "落库 status=STALE");
     }
 
+    @Test
+    @DisplayName("交易日感知：缺最近一个交易日bar（如8-14只有8-12）→ STALE，即使仅差2天")
+    void missingLatestTradeDayBarIsStale() throws Exception {
+        StockInfo stock = new StockInfo(11, "LITE", "Lumentum");
+        when(stockGroupService.getStocksInGroup("美股")).thenReturn(List.of(stock));
+        // bar 停在 4 天前 —— 无论今天周几，必早于预期交易日（expected 最早=昨天-2）；
+        // 且 staleDays=4>3 也会走兜底，但 expected 分支优先，reason 应为"早于预期交易日"
+        String oldBar = java.time.LocalDate.now().minusDays(4).toString();
+        List<KLineService.KLineData> klines = List.of(
+                new KLineService.KLineData(oldBar + " 00:00:00", 1, 1, 1, 1, 100L, 13.63));
+        when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(klines);
+
+        RightTrendReport report = service.analyzeGroup("美股");
+
+        StockTrendResult r = report.stocks().get(0);
+        assertFalse(r.success(), "缺最近交易日 bar 应判 stale");
+        assertTrue(r.reason().contains("K线数据过旧"), "reason 标注数据过旧");
+        verifyNoInteractions(llmClient);  // 不喂 LLM
+
+        ArgumentCaptor<RightTrendAnalysisRecord> captor = ArgumentCaptor.forClass(RightTrendAnalysisRecord.class);
+        verify(repository).save(captor.capture());
+        assertEquals("STALE", captor.getValue().getStatus(), "落库 status=STALE");
+        assertTrue(captor.getValue().getErrorMessage().contains("早于预期交易日"),
+                "errorMessage 指出早于预期交易日");
+    }
+
     private RightTrendAnalysisRecord rec(String tradeDate, boolean inTrend) {
         return new RightTrendAnalysisRecord("美股", "11.AAPL", "Apple",
                 tradeDate, inTrend, "high", "up", "sig", "reason", "deepseek");

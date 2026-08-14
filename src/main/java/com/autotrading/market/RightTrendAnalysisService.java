@@ -164,17 +164,26 @@ public class RightTrendAnalysisService {
             return failed;
         }
 
-        // 最新 bar 日期校验：OpenD 数据源可能延迟缺最新交易日 bar，
-        // 用旧 bar 出报告会导致涨跌幅 / LLM 判断与实际相反（见 staleData）。
+        // 最新 bar 日期校验：交易日感知 —— 最新 bar 应 == 该市场预期最近交易日。
+        // OpenD 数据源可能延迟缺最新交易日 bar（如 8-14 拿到 8-12 的 bar），
+        // 用旧 bar 出报告会导致涨跌幅/LLM 判断错误。判据：
+        //   ① 主：最新 bar != 预期最近交易日 → STALE（精准，治"缺最近一个交易日"）
+        //   ② 兜底：距今 > maxStaleDays → STALE（极端延迟，覆盖假日/停牌）
         KLineService.KLineData lastBar = klines.get(klines.size() - 1);
+        String lastBarDate = lastBar.time().length() >= 10 ? lastBar.time().substring(0, 10) : lastBar.time();
+        String expected = expectedLatestTradeDate(stock.getMarket());
         long staleDays = staleDays(lastBar);
-        if (staleDays > rightTrendProperties.getMaxStaleDays()) {
-            log.warn("Stale K-line for {}: latest bar {} ({} days old > max {}), skipping analysis",
-                    stock.key(), lastBar.time(), staleDays, rightTrendProperties.getMaxStaleDays());
-            StockTrendResult stale = StockTrendResult.staleData(stock, groupName, lastBar.time());
-            persistRecord(stale, tradeDate, resolved == null ? null : resolved.id(),
-                    "STALE", "K线最新bar=" + lastBar.time().substring(0, 10) + " 距今" + staleDays + "天");
-            return stale;
+        // bar 晚于或等于预期交易日都算新鲜（当日 bar 已就绪更好）；仅"早于预期"判 stale
+        boolean stale = (expected != null && lastBarDate.compareTo(expected) < 0)
+                || staleDays > rightTrendProperties.getMaxStaleDays();
+        if (stale) {
+            String reason = expected != null && lastBarDate.compareTo(expected) < 0
+                    ? "最新bar=" + lastBarDate + " 早于预期交易日(" + expected + ")"
+                    : "最新bar=" + lastBarDate + " 距今" + staleDays + "天(>" + rightTrendProperties.getMaxStaleDays() + ")";
+            log.warn("Stale K-line for {}: {} ({} days old), skipping analysis", stock.key(), reason, staleDays);
+            StockTrendResult staleResult = StockTrendResult.staleData(stock, groupName, lastBar.time());
+            persistRecord(staleResult, tradeDate, resolved == null ? null : resolved.id(), "STALE", reason);
+            return staleResult;
         }
 
         // Take last N bars (default 60)
@@ -310,6 +319,39 @@ public class RightTrendAnalysisService {
         if (market == StockInfo.MARKET_CN_SH) return "A股(沪)";
         if (market == StockInfo.MARKET_CN_SZ) return "A股(深)";
         return "M" + market;
+    }
+
+    /**
+     * 该市场预期最新 bar 的交易日（yyyy-MM-dd）；无法判定返回 null（退回 staleDays 兜底）。
+     *
+     * <p>美股（market=11）：北京 T 日分析（如 09:00）时美东仍处 T-1 日下午（收盘后），
+     * 预期最新 bar = 美东「昨天」往前最近的周一~周五。
+     * 港股/A股：本地（北京）「昨天」往前最近的周一~周五（9/17 点分析时当日未收盘或刚收盘，
+     * 数据源当日 bar 可能未就绪，预期前一交易日更稳妥）。
+     *
+     * <p>注意：不含假日日历（美东/港股/A股节假日会误判为 stale 并由补偿器稍后重试 ——
+     * 数据就绪后自愈，属可接受代价；避免引入假日库依赖）。
+     */
+    private String expectedLatestTradeDate(int market) {
+        try {
+            // 基准日：美股按美东"昨天"，其它市场按北京"昨天"
+            LocalDate base = LocalDate.now().minusDays(1);
+            // 北京 09:00 = 美东前一日 21:00（夏令时）；美东视角的"昨天"= 北京日期-1，已由 base 表达。
+            // 往前找最近的工作日（周一~周五）
+            LocalDate d = base;
+            for (int i = 0; i < 7 && isWeekend(d); i++) {
+                d = d.minusDays(1);
+            }
+            return d.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (Exception e) {
+            log.warn("Failed to compute expected trade date for market {}: {}", market, e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean isWeekend(LocalDate d) {
+        var dow = d.getDayOfWeek();
+        return dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY;
     }
 
     /** 最新 bar 距今天数（日历日）；time 形如 "2026-08-07" 或 "2026-08-07 00:00:00"。解析失败返回 0（不阻断）。 */
