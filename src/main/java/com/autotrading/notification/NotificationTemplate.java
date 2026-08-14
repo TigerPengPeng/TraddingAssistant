@@ -276,9 +276,8 @@ public class NotificationTemplate {
 
             for (var stock : listed) {
                 boolean ok = stock.success();
-                String trendCell = ok
-                        ? trendStripHtml(stock.trendHistory(), stock.isInRightTrend())
-                        : "<span style=\"color:#dc2626;font-weight:700\">数据异常</span>";
+                // 失败股（K线拉取失败/数据过旧）也渲染历史成功数据的色块条，仅末尾追加一格灰色 ⚠ 异常格
+                String trendCell = trendStripHtml(stock.trendHistory(), stock.isInRightTrend(), !ok);
                 String confColor = switch (stock.confidence()) {
                     case "high" -> "#16a34a";
                     case "medium" -> "#d29922";
@@ -359,24 +358,33 @@ public class NotificationTemplate {
 
     /**
      * 最近7日右侧趋势色块条（嵌套 table，邮件客户端兼容）：
-     * 每格一个绿(进入)/红(未进入) td，下方标 MM-dd；历史为空时回退为单字「是/否」。
+     * 每格一个绿(进入)/红(未进入) td，下方标 MM-dd。
+     * {@code errorTail}=true 时（失败/数据过旧股）末尾追加一格灰色 ⚠ —— 保留历史成功数据展示，
+     * 仅"出问题的这一天"标记异常；历史为空则退化为单格 ⚠。
      */
     private static String trendStripHtml(
             java.util.List<com.autotrading.market.RightTrendAnalysisService.StockTrendResult.TrendDay> history,
-            boolean currentInTrend) {
-        if (history == null || history.isEmpty()) {
+            boolean currentInTrend, boolean errorTail) {
+        boolean hasHistory = history != null && !history.isEmpty();
+        if (!hasHistory && !errorTail) {
             return currentInTrend
                     ? "<span style=\"color:#16a34a;font-weight:700\">是</span>"
                     : "<span style=\"color:#dc2626\">否</span>";
         }
         StringBuilder sb = new StringBuilder("<table style=\"border-collapse:collapse;margin:0 auto\"><tr>");
-        for (com.autotrading.market.RightTrendAnalysisService.StockTrendResult.TrendDay d : history) {
-            String date = d.date();
-            String mmdd = (date != null && date.length() >= 10) ? date.substring(5) : (date == null ? "" : date);
-            String bg = d.isInRightTrend() ? "#16a34a" : "#dc2626";
-            sb.append("<td style=\"padding:3px 5px;border:1px solid #fff;text-align:center;background:")
-              .append(bg).append(";color:#fff;font-size:11px;line-height:1.15;min-width:34px\">")
-              .append(d.isInRightTrend() ? "✓" : "✗").append("<br>").append(mmdd).append("</td>");
+        if (hasHistory) {
+            for (com.autotrading.market.RightTrendAnalysisService.StockTrendResult.TrendDay d : history) {
+                String date = d.date();
+                String mmdd = (date != null && date.length() >= 10) ? date.substring(5) : (date == null ? "" : date);
+                String bg = d.isInRightTrend() ? "#16a34a" : "#dc2626";
+                sb.append("<td style=\"padding:3px 5px;border:1px solid #fff;text-align:center;background:")
+                  .append(bg).append(";color:#fff;font-size:11px;line-height:1.15;min-width:34px\">")
+                  .append(d.isInRightTrend() ? "✓" : "✗").append("<br>").append(mmdd).append("</td>");
+            }
+        }
+        if (errorTail) {
+            sb.append("<td style=\"padding:3px 5px;border:1px solid #fff;text-align:center;background:#8b949e;")
+              .append("color:#fff;font-size:11px;line-height:1.15;min-width:34px\">⚠<br>异常</td>");
         }
         sb.append("</tr></table>");
         return sb.toString();

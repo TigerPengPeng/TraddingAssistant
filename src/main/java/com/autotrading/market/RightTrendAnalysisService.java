@@ -161,7 +161,7 @@ public class RightTrendAnalysisService {
             StockTrendResult failed = StockTrendResult.failed(stock, groupName);
             persistRecord(failed, tradeDate, resolved == null ? null : resolved.id(),
                     "FAILED", "K线拉取失败（限流/无权限/不支持）");
-            return failed;
+            return withHistory(failed);
         }
 
         // 最新 bar 日期校验：交易日感知 —— 最新 bar 应 == 该市场预期最近交易日。
@@ -183,7 +183,7 @@ public class RightTrendAnalysisService {
             log.warn("Stale K-line for {}: {} ({} days old), skipping analysis", stock.key(), reason, staleDays);
             StockTrendResult staleResult = StockTrendResult.staleData(stock, groupName, lastBar.time());
             persistRecord(staleResult, tradeDate, resolved == null ? null : resolved.id(), "STALE", reason);
-            return staleResult;
+            return withHistory(staleResult);
         }
 
         // Take last N bars (default 60)
@@ -199,7 +199,7 @@ public class RightTrendAnalysisService {
             log.warn("No LLM provider configured; skipping analysis for {}", stock.key());
             StockTrendResult failed = StockTrendResult.failed(stock, groupName);
             persistRecord(failed, tradeDate, null, "FAILED", "未配置LLM供应商");
-            return failed;
+            return withHistory(failed);
         }
 
         LlmAnalysisClient.LlmAnalysis analysis = llmClient.analyzeRightTrend(
@@ -228,6 +228,7 @@ public class RightTrendAnalysisService {
             result = StockTrendResult.failed(stock, groupName);
             persistRecord(result, tradeDate, resolved.id(), "ANALYSIS_FAILED",
                     "LLM返回失败：" + (analysis.reason() == null ? "未知" : analysis.reason()));
+            result = withHistory(result);
         }
 
         return result;
@@ -299,8 +300,12 @@ public class RightTrendAnalysisService {
      */
     private List<StockTrendResult.TrendDay> buildTrendHistory(String stockKey) {
         List<RightTrendAnalysisRecord> all = repository.findByStockKeyOrderByCreatedAtDesc(stockKey);
+        // 只统计「成功」记录（DONE/SUPERSEDED）——历史里的失败行（STALE/FAILED，
+        // isInRightTrend=false）混入会被渲染成误导性的红色"未进入"格；当天失败行也因此自动排除
         LinkedHashMap<String, Boolean> latestByDate = new LinkedHashMap<>();
         for (RightTrendAnalysisRecord r : all) {
+            String st = r.getStatus();
+            if (!"DONE".equals(st) && !"SUPERSEDED".equals(st)) continue;
             latestByDate.putIfAbsent(r.getTradeDate(), r.getIsInRightTrend());
         }
         List<String> dates = new ArrayList<>(latestByDate.keySet());
@@ -311,6 +316,14 @@ public class RightTrendAnalysisService {
             history.add(new StockTrendResult.TrendDay(d, latestByDate.get(d)));
         }
         return history;
+    }
+
+    /** 失败/数据过旧的结果也带上历史成功趋势（供前端/邮件渲染"历史色块条+当天异常格"）。 */
+    private StockTrendResult withHistory(StockTrendResult r) {
+        return new StockTrendResult(r.stockKey(), r.stockName(), r.groupName(),
+                r.isInRightTrend(), r.confidence(), r.trendDirection(), r.keySignals(),
+                r.reason(), r.success(), r.topBottomSignal(), r.topBottomReason(),
+                r.volume(), buildTrendHistory(r.stockKey()));
     }
 
     private String marketLabel(int market) {
