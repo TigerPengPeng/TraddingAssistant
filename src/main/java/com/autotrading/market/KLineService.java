@@ -24,6 +24,13 @@ public class KLineService {
 
     private static final Logger log = LoggerFactory.getLogger(KLineService.class);
     private static final int MAX_KL_COUNT = 120;
+    /**
+     * 单次请求根数上限。必须大于时间窗口内的实际 bar 数：OpenD 在窗口内 bar 数
+     * 超过该上限时从 beginTime 起返回**最旧** N 根（其余需 nextReqKey 翻页），
+     * 若设为 120 会把最新 bar 静默截掉（实测美股 175 天窗口约 121~123 根日 K）。
+     * 175 天窗口最多 ~125 根日 K、900 天窗口最多 ~130 根周 K，1000 足够。
+     */
+    private static final int MAX_KL_REQUEST = 1000;
     /** OpenD 历史K线限流（免费档 60 次/30 秒）时的最大重试次数（退避后重试）。 */
     private static final int MAX_KL_RATELIMIT_RETRIES = 2;
     /** 限流退避毫秒（OpenD 限流窗口 30 秒，等 5 秒后重试通常可过）。 */
@@ -65,8 +72,11 @@ public class KLineService {
     /**
      * Fetches K-lines for a stock at the given Futu KL type value (e.g.
      * {@link KLType#KLType_Day_VALUE}, {@link KLType#KLType_Week_VALUE}).
-     * The date window is widened for lower-frequency bars so maxAckKLNum
-     * returns the most recent bars.
+     * The date window is widened for lower-frequency bars so it always covers
+     * {@link #MAX_KL_COUNT} bars; the request cap ({@link #MAX_KL_REQUEST}) is
+     * set above the window's bar count because OpenD returns the OLDEST N bars
+     * from beginTime when the window holds more — after the fetch we keep only
+     * the most recent {@link #MAX_KL_COUNT} bars client-side.
      */
     public List<KLineData> fetchKLines(StockInfo stock, int klTypeValue) throws AsyncRequestBridge.FutuRequestException {
         FTAPI_Conn_Qot conn = connectionManager.getConnQot();
@@ -84,7 +94,7 @@ public class KLineService {
                         .setKlType(klTypeValue)
                         .setRehabType(RehabType.RehabType_Forward_VALUE)
                         .setBeginTime(beginDate).setEndTime(endDate)
-                        .setMaxAckKLNum(MAX_KL_COUNT).build())
+                        .setMaxAckKLNum(MAX_KL_REQUEST).build())
                 .build();
 
         QotRequestHistoryKL.Response response = null;
@@ -113,6 +123,10 @@ public class KLineService {
             if (kl.getIsBlank()) continue;
             klines.add(new KLineData(kl.getTime(), kl.getOpenPrice(), kl.getHighPrice(),
                     kl.getLowPrice(), kl.getClosePrice(), kl.getVolume(), kl.getChangeRate()));
+        }
+        // 窗口内 bar 数可能超过需求（如美股 175 天窗口 ~123 根日 K），只保留最新 N 根
+        if (klines.size() > MAX_KL_COUNT) {
+            klines = new ArrayList<>(klines.subList(klines.size() - MAX_KL_COUNT, klines.size()));
         }
         String cacheKey = cacheKey(stock.key(), klTypeValue);
         klineCache.put(cacheKey, new CachedKLines(klines, System.currentTimeMillis()));

@@ -212,6 +212,43 @@ class RightTrendAnalysisServiceTest {
                 "errorMessage 指出早于预期交易日");
     }
 
+    @Test
+    @DisplayName("黑名单（exclude-codes）标的直接跳过：不拉K线、不调LLM、不落库")
+    void excludesBlacklistedCodes() throws Exception {
+        rightTrendProps.setExcludeCodes("BZmain, .VIX,CLmain,.SOX");
+        StockInfo futures = new StockInfo(11, "BZmain", "Brent");
+        StockInfo index = new StockInfo(11, ".VIX", "VIX");
+        StockInfo apple = new StockInfo(11, "AAPL", "Apple");
+        when(stockGroupService.getStocksInGroup("美股"))
+                .thenReturn(List.of(futures, index, apple));
+        when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
+        when(llmClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList(), any()))
+                .thenReturn(new LlmAnalysis(true, true, "high", "up", "mid", "趋势中段",
+                        List.of("突破MA30"), "uptrend", null));
+
+        RightTrendReport report = service.analyzeGroup("美股");
+
+        assertEquals(1, report.stocks().size(), "黑名单 2 只被跳过，只剩 AAPL");
+        assertEquals("11.AAPL", report.stocks().get(0).stockKey());
+        verify(repository, times(1)).save(any());
+        verify(llmClient, times(1)).analyzeRightTrend(anyString(), anyString(), anyString(), anyList(), any());
+    }
+
+    @Test
+    @DisplayName("补偿重试跳过黑名单标的且不落库（原记录已被补偿器删除，彻底清除）")
+    void retrySkipsBlacklistedCode() {
+        rightTrendProps.setExcludeCodes("BZmain");
+        RightTrendAnalysisRecord record = new RightTrendAnalysisRecord(
+                "美股", "11.BZmain", "Brent", "2026-08-14", false, "unknown",
+                "unknown", "", "K线拉取失败", "deepseek", "FAILED", 1, null, "无权限");
+
+        StockTrendResult result = service.retryStock(record, "deepseek");
+
+        assertFalse(result.success());
+        verify(repository, never()).save(any());
+        verifyNoInteractions(kLineService, llmClient);
+    }
+
     private RightTrendAnalysisRecord rec(String tradeDate, boolean inTrend) {
         return new RightTrendAnalysisRecord("美股", "11.AAPL", "Apple",
                 tradeDate, inTrend, "high", "up", "sig", "reason", "deepseek");

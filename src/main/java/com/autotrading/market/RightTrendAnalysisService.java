@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -30,6 +32,9 @@ public class RightTrendAnalysisService {
 
     /** 右侧趋势列展示的最近交易日数（DB 有记录的最近 N 个不同 tradeDate） */
     private static final int TREND_HISTORY_DAYS = 7;
+    /** 美股判断「最近已完成交易日」用的时区与美东常规收盘时刻。 */
+    private static final String US_ZONE = "America/New_York";
+    private static final java.time.LocalTime US_CLOSE_ET = java.time.LocalTime.of(16, 0);
 
     private final StockGroupService stockGroupService;
     private final KLineService kLineService;
@@ -89,6 +94,16 @@ public class RightTrendAnalysisService {
                 log.error("Failed to fetch stocks from group [{}]: {}", groupName, e.getMessage());
                 continue;
             }
+            // 黑名单（right-trend.exclude-codes）：期货/指数等股票 K 线接口不支持的标的直接跳过
+            List<StockInfo> excluded = stocks.stream()
+                    .filter(s -> rightTrendProperties.isExcluded(s.getCode())).toList();
+            if (!excluded.isEmpty()) {
+                log.info("Group [{}] skipping {} blacklisted codes: {}", groupName, excluded.size(),
+                        excluded.stream().map(StockInfo::getCode).toList());
+                stocks = stocks.stream()
+                        .filter(s -> !rightTrendProperties.isExcluded(s.getCode()))
+                        .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+            }
             log.info("Group [{}] contains {} stocks", groupName, stocks.size());
 
             for (StockInfo stock : stocks) {
@@ -131,6 +146,11 @@ public class RightTrendAnalysisService {
             return StockTrendResult.failed(
                     new StockInfo(11, record.getStockKey(), record.getStockName()), record.getGroupName());
         }
+        // 黑名单标的不重试（补偿器调用前已删除原记录，此处不落库即彻底清除，终止重试循环）
+        if (rightTrendProperties.isExcluded(stock.getCode())) {
+            log.info("Skip compensation retry for blacklisted code {}", record.getStockKey());
+            return StockTrendResult.failed(stock, record.getGroupName());
+        }
         return analyzeSingleStock(stock, record.getGroupName(), record.getTradeDate(), resolved);
     }
 
@@ -165,17 +185,18 @@ public class RightTrendAnalysisService {
         }
 
         // 最新 bar 日期校验：交易日感知 —— 最新 bar 应 == 该市场预期最近交易日。
-        // OpenD 数据源可能延迟缺最新交易日 bar（如 8-14 拿到 8-12 的 bar），
         // 用旧 bar 出报告会导致涨跌幅/LLM 判断错误。判据：
         //   ① 主：最新 bar != 预期最近交易日 → STALE（精准，治"缺最近一个交易日"）
-        //   ② 兜底：距今 > maxStaleDays → STALE（极端延迟，覆盖假日/停牌）
+        //   ② 兜底：距今 > maxStaleDays → STALE（仅在①无法判定【expected=null】时启用；
+        //      若与①同时生效会在周末/假日误伤——周一美股 bar=周五属新鲜数据，但距今3天>阈值）
         KLineService.KLineData lastBar = klines.get(klines.size() - 1);
         String lastBarDate = lastBar.time().length() >= 10 ? lastBar.time().substring(0, 10) : lastBar.time();
         String expected = expectedLatestTradeDate(stock.getMarket());
         long staleDays = staleDays(lastBar);
         // bar 晚于或等于预期交易日都算新鲜（当日 bar 已就绪更好）；仅"早于预期"判 stale
-        boolean stale = (expected != null && lastBarDate.compareTo(expected) < 0)
-                || staleDays > rightTrendProperties.getMaxStaleDays();
+        boolean staleByExpected = expected != null && lastBarDate.compareTo(expected) < 0;
+        boolean stale = expected != null ? staleByExpected
+                : staleDays > rightTrendProperties.getMaxStaleDays();
         if (stale) {
             String reason = expected != null && lastBarDate.compareTo(expected) < 0
                     ? "最新bar=" + lastBarDate + " 早于预期交易日(" + expected + ")"
@@ -337,28 +358,48 @@ public class RightTrendAnalysisService {
     /**
      * 该市场预期最新 bar 的交易日（yyyy-MM-dd）；无法判定返回 null（退回 staleDays 兜底）。
      *
-     * <p>定时任务在收盘后 1 小时执行（美股 17:00 ET / 港A 17:00 北京），此时当日 bar 应已就绪，
-     * 预期最新 bar = 「今天」往前最近的周一~周五。手动「立即分析」在盘中触发时当日 bar 可能
-     * 未生成 → 判 STALE → 补偿器稍后数据就绪自动重跑（可接受代价，换来严格模式）。
+     * <p>定时任务在收盘后执行（美股 09:00 北京 = 前一日 21:00 美东 / 港A 17:00 北京），
+     * 此时当日 bar 应已就绪。
+     *
+     * <p>美股按美东时间（America/New_York）判断：美东 16:00 收盘前当日 bar 未完成，预期取
+     * 前一自然日再跳过周末；收盘后预期即当日。不能用服务器本地日期——北京时间下午时美东
+     * 当日尚未开盘，会把「尚未存在的当日 bar」误当预期（2026-08-14 美股全组误判 STALE）。
+     *
+     * <p>HK/CN 沿用原语义：服务器本地日期往前找最近工作日。手动「立即分析」在盘中触发时
+     * 当日 bar 可能未生成 → 判 STALE → 补偿器稍后数据就绪自动重跑（可接受代价）。
      *
      * <p>注意：不含假日日历（节假日会误判为 stale 并由补偿器稍后重试 —— 数据就绪后自愈，
      * 属可接受代价；避免引入假日库依赖）。
      */
     private String expectedLatestTradeDate(int market) {
         try {
-            // 基准 = 今天（任务在收盘后1h跑，当日 bar 应就绪），往前找最近工作日
-            LocalDate d = LocalDate.now();
-            for (int i = 0; i < 7 && isWeekend(d); i++) {
-                d = d.minusDays(1);
-            }
-            return d.format(DateTimeFormatter.ISO_LOCAL_DATE);
+            return expectedLatestTradeDateAt(market, ZonedDateTime.now());
         } catch (Exception e) {
             log.warn("Failed to compute expected trade date for market {}: {}", market, e.getMessage());
             return null;
         }
     }
 
-    private boolean isWeekend(LocalDate d) {
+    /** 计算指定时刻该市场最近一个已完成交易日；拆成静态方法便于单测注入时间。 */
+    static String expectedLatestTradeDateAt(int market, ZonedDateTime now) {
+        LocalDate d;
+        if (market == StockInfo.MARKET_US) {
+            ZonedDateTime nowET = now.withZoneSameInstant(ZoneId.of(US_ZONE));
+            d = nowET.toLocalDate();
+            // 美东收盘前，当日 bar 未完成，预期落回前一自然日
+            if (nowET.toLocalTime().isBefore(US_CLOSE_ET)) {
+                d = d.minusDays(1);
+            }
+        } else {
+            d = now.toLocalDate();
+        }
+        for (int i = 0; i < 7 && isWeekend(d); i++) {
+            d = d.minusDays(1);
+        }
+        return d.format(DateTimeFormatter.ISO_LOCAL_DATE);
+    }
+
+    private static boolean isWeekend(LocalDate d) {
         var dow = d.getDayOfWeek();
         return dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY;
     }

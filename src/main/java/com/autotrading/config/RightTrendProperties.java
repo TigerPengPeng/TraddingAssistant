@@ -26,6 +26,13 @@ public class RightTrendProperties {
     // 1 = 只要不是上一最新交易日的数据就报错（严格模式）
     private int maxStaleDays = 1;
 
+    /**
+     * 右侧分析黑名单：股票代码列表（逗号分隔，大小写不敏感，按 bare code 匹配）。
+     * 用于跳过股票 K 线接口不支持的标的（如 BZmain/CLmain 期货主连、.VIX/.SOX 指数），
+     * 命中后完全不进入分析流程（不拉 K 线、不调 LLM、不落库、补偿也不重试）。
+     */
+    private String excludeCodes = "";
+
     // ---- 自动补偿（compensation）----
     /** 补偿调度器是否启用。 */
     private boolean compensationEnabled = true;
@@ -58,6 +65,17 @@ public class RightTrendProperties {
     public void setVolumeAnomalyWindow(int volumeAnomalyWindow) { this.volumeAnomalyWindow = volumeAnomalyWindow; }
     public int getMaxStaleDays() { return maxStaleDays; }
     public void setMaxStaleDays(int maxStaleDays) { this.maxStaleDays = maxStaleDays; }
+    public String getExcludeCodes() { return excludeCodes; }
+    public void setExcludeCodes(String excludeCodes) { this.excludeCodes = excludeCodes; }
+
+    /** 判断股票代码是否在右侧分析黑名单中（按 bare code 匹配，忽略大小写与两侧空白）。 */
+    public boolean isExcluded(String code) {
+        if (code == null || excludeCodes == null || excludeCodes.isBlank()) return false;
+        for (String c : excludeCodes.split(",")) {
+            if (!c.isBlank() && code.equalsIgnoreCase(c.trim())) return true;
+        }
+        return false;
+    }
     public boolean isCompensationEnabled() { return compensationEnabled; }
     public void setCompensationEnabled(boolean compensationEnabled) { this.compensationEnabled = compensationEnabled; }
     public long getCompensationIntervalMs() { return compensationIntervalMs; }

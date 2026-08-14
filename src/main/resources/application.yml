@@ -87,7 +87,10 @@ right-trend:
   kline-lookback: 60
   volume-anomaly-ratio: ${RIGHT_TREND_VOLUME_ANOMALY_RATIO:2.0}
   volume-anomaly-window: ${RIGHT_TREND_VOLUME_ANOMALY_WINDOW:20}
-  # Provider for the daily scheduled jobs (09:00 US, 17:00 HK+CN).
+  # 右侧分析黑名单（逗号分隔的 bare code，大小写不敏感）：命中的标的不分析、不落库、不补偿重试。
+  # 默认跳过期货主连（BZmain/CLmain）与美股指数（.VIX/.SOX）——股票 K 线接口不支持它们。
+  exclude-codes: ${RIGHT_TREND_EXCLUDE_CODES:BZmain,CLmain,.VIX,.SOX}
+  # Provider for the daily scheduled jobs (17:00 ET US, 17:00 Asia/Shanghai HK+CN).
   # Decoupled from ai.default-provider so the frontend default can change freely.
   scheduled-provider: ${RIGHT_TREND_SCHEDULED_PROVIDER:deepseek}
 

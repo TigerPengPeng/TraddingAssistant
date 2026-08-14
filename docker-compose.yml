@@ -60,6 +60,10 @@ services:
       DB_PATH: /app/data/autotrading
       # Provider for the daily scheduled right-trend jobs (default deepseek).
       RIGHT_TREND_SCHEDULED_PROVIDER: ${RIGHT_TREND_SCHEDULED_PROVIDER:-deepseek}
+      # Right-trend analysis blacklist (comma-separated bare codes; default skips
+      # futures mains BZmain/CLmain and US indices .VIX/.SOX, unsupported by the
+      # stock K-line API). Override in .env.
+      RIGHT_TREND_EXCLUDE_CODES: ${RIGHT_TREND_EXCLUDE_CODES:-BZmain,CLmain,.VIX,.SOX}
     ports:
       - "8080:8080"
     volumes:
