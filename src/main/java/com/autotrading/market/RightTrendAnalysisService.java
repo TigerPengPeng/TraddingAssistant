@@ -77,14 +77,16 @@ public class RightTrendAnalysisService {
      * default provider). Merges results into a single report.
      */
     public RightTrendReport analyzeGroups(List<String> groupNames, String providerId) {
-        String tradeDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
         AiProviderProperties.Resolved resolved = aiProviderProperties.resolve(providerId);
         String providerIdResolved = resolved == null ? null : resolved.id();
         String providerLabel = resolved == null ? null : resolved.provider().getLabel();
-        log.info("Starting right-trend analysis for groups: {} on {} (provider={})",
-                groupNames, tradeDate, providerIdResolved);
+        log.info("Starting right-trend analysis for groups: {} (provider={})",
+                groupNames, providerIdResolved);
 
         List<StockTrendResult> results = new ArrayList<>();
+        // 报告归属交易日按市场确定（美股组 = 美东最近已完成交易日），首个非空分组决定；
+        // 所有分组拉取失败/为空时退回服务器本地日期
+        String tradeDate = null;
 
         for (String groupName : groupNames) {
             List<StockInfo> stocks;
@@ -106,6 +108,11 @@ public class RightTrendAnalysisService {
             }
             log.info("Group [{}] contains {} stocks", groupName, stocks.size());
 
+            if (tradeDate == null && !stocks.isEmpty()) {
+                tradeDate = resolveTradeDate(stocks.get(0).getMarket());
+                log.info("Report tradeDate = {} (market={})", tradeDate, stocks.get(0).getMarket());
+            }
+
             for (StockInfo stock : stocks) {
                 StockTrendResult result = analyzeSingleStock(stock, groupName, tradeDate, resolved);
                 results.add(result);
@@ -123,11 +130,27 @@ public class RightTrendAnalysisService {
             }
         }
 
+        if (tradeDate == null) {
+            tradeDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        }
         RightTrendReport report = new RightTrendReport(tradeDate, groupNames, results,
                 System.currentTimeMillis(), providerIdResolved, providerLabel);
-        log.info("Right-trend analysis complete: {} stocks analyzed, {} in right trend",
-                results.size(), results.stream().filter(StockTrendResult::isInRightTrend).count());
+        log.info("Right-trend analysis complete: {} stocks analyzed, {} in right trend (tradeDate={})",
+                results.size(), results.stream().filter(StockTrendResult::isInRightTrend).count(), tradeDate);
         return report;
+    }
+
+    /**
+     * 报告归属交易日：美股组用美东最近已完成交易日（K 线 bar 的交易日），避免北京日期
+     * 比美股交易日多一天——例如北京周六 05:00（美东周五 17:00）分析的是周五 08-14 的 bar，
+     * 报告应标 08-14 而非北京当天 08-15。HK/CN 沿用服务器本地日期（任务在当天收盘后跑）。
+     */
+    private String resolveTradeDate(int market) {
+        if (market == StockInfo.MARKET_US) {
+            String d = expectedLatestTradeDate(market);
+            if (d != null) return d;
+        }
+        return LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
     }
 
     /**

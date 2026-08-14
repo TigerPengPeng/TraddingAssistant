@@ -249,6 +249,42 @@ class RightTrendAnalysisServiceTest {
         verifyNoInteractions(kLineService, llmClient);
     }
 
+    @Test
+    @DisplayName("报告日期：美股组标美东最近已完成交易日，而非北京当天")
+    void usGroupReportUsesEtTradeDate() throws Exception {
+        StockInfo apple = new StockInfo(11, "AAPL", "Apple");
+        when(stockGroupService.getStocksInGroup("美股")).thenReturn(List.of(apple));
+        when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
+        when(llmClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList(), any()))
+                .thenReturn(new LlmAnalysis(true, true, "high", "up", "mid", "趋势中段",
+                        List.of("突破MA30"), "uptrend", null));
+
+        RightTrendReport report = service.analyzeGroup("美股");
+
+        String expectedEtDate = RightTrendAnalysisService.expectedLatestTradeDateAt(
+                StockInfo.MARKET_US, java.time.ZonedDateTime.now());
+        assertEquals(expectedEtDate, report.date(), "美股报告日期 = 美东最近已完成交易日");
+    }
+
+    @Test
+    @DisplayName("报告日期：港股组仍用服务器本地日期；分组全失败时退回本地日期")
+    void hkGroupReportUsesLocalDate() throws Exception {
+        StockInfo tencent = new StockInfo(1, "00700", "腾讯");
+        when(stockGroupService.getStocksInGroup("港股")).thenReturn(List.of(tencent));
+        when(kLineService.getOrFetchKLines(any(StockInfo.class))).thenReturn(sampleKLines());
+        when(llmClient.analyzeRightTrend(anyString(), anyString(), anyString(), anyList(), any()))
+                .thenReturn(new LlmAnalysis(true, true, "high", "up", "mid", "趋势中段",
+                        List.of("突破MA30"), "uptrend", null));
+
+        RightTrendReport report = service.analyzeGroup("港股");
+        assertEquals(java.time.LocalDate.now().toString(), report.date(), "港股报告日期 = 本地当天");
+
+        when(stockGroupService.getStocksInGroup("空组"))
+                .thenThrow(new com.autotrading.futu.AsyncRequestBridge.FutuRequestException("Not connected"));
+        RightTrendReport empty = service.analyzeGroup("空组");
+        assertEquals(java.time.LocalDate.now().toString(), empty.date(), "无股票时退回本地当天");
+    }
+
     private RightTrendAnalysisRecord rec(String tradeDate, boolean inTrend) {
         return new RightTrendAnalysisRecord("美股", "11.AAPL", "Apple",
                 tradeDate, inTrend, "high", "up", "sig", "reason", "deepseek");
