@@ -148,4 +148,31 @@ class RightTrendNotificationTemplateTest {
         assertTrue(html.contains("<table style=\"border-collapse:collapse;margin:0 auto\">"),
                 "色块条嵌套 table");
     }
+
+    @Test
+    @DisplayName("涨跌幅列：最近交易日涨跌幅带符号渲染，涨绿跌红，失败股显示 -")
+    void dayChangeColumnRenders() {
+        StockTrendResult up = new StockTrendResult(
+                "11.LITE", "Lumentum", "US", true, "high", "up",
+                List.of(), "ok", true, null, null,
+                new StockTrendResult.VolumeAnomaly(100L, 50.0, 2.0, 13.63, false));
+        StockTrendResult down = new StockTrendResult(
+                "11.COHR", "Coherent", "US", false, "medium", "down",
+                List.of(), "ok", true, null, null,
+                new StockTrendResult.VolumeAnomaly(100L, 50.0, 1.0, -4.78, false));
+        StockTrendResult failed = new StockTrendResult(
+                "11.FAIL", "FAIL", "US", false, "unknown", "unknown",
+                List.of(), "Analysis failed", false);
+        RightTrendReport report = new RightTrendReport("2026-08-14",
+                List.of("US"), List.of(up, down, failed), System.currentTimeMillis(), "deepseek", "DeepSeek");
+
+        String html = NotificationTemplate.rightTrendBody(report);
+
+        assertTrue(html.contains("涨跌幅"), "表头含「涨跌幅」列");
+        assertTrue(html.contains("+13.63%"), "上涨带 + 号");
+        assertTrue(html.contains("-4.78%"), "下跌带 - 号");
+        // 失败股（success=false 无 volume）的涨跌幅单元格为 "-"（不误显示 0.00%）
+        // 用行内三股均渲染验证：+13.63% 与 -4.78% 都在，且 "0.00%" 不出现
+        assertFalse(html.contains("0.00%"), "失败股不应显示 0.00%");
+    }
 }

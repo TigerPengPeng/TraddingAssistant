@@ -269,6 +269,7 @@ public class NotificationTemplate {
             sb.append("<tr><th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">股票</th>")
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">分组</th>")
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">右侧趋势</th>")
+              .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">涨跌幅</th>")
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">置信度</th>")
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6\">顶/底</th>")
               .append("<th style=\"padding:8px 10px;border:1px solid #e5e7eb;background:#f3f4f6;text-align:left\">关键信号</th>")
@@ -296,6 +297,8 @@ public class NotificationTemplate {
                   .append(stock.groupName()).append("</td>")
                   .append("<td style=\"").append(td).append("text-align:center\">")
                   .append(trendCell).append("</td>")
+                  .append("<td style=\"").append(td).append("text-align:center;font-weight:600;color:")
+                  .append(dayChangeColor(stock)).append("\">").append(dayChangeText(stock)).append("</td>")
                   .append("<td style=\"").append(td).append("text-align:center;color:")
                   .append(confColor).append(";font-weight:600\">").append(ok ? stock.confidence() : "-").append("</td>")
                   .append("<td style=\"").append(td).append("text-align:center\">")
@@ -362,6 +365,19 @@ public class NotificationTemplate {
      * {@code errorTail}=true 时（失败/数据过旧股）末尾追加一格灰色 ⚠ —— 保留历史成功数据展示，
      * 仅"出问题的这一天"标记异常；历史为空则退化为单格 ⚠。
      */
+    /** 最近交易日涨跌幅文本：+X.XX% / -X.XX%；失败股或无 volume 数据显示 "-"。 */
+    private static String dayChangeText(com.autotrading.market.RightTrendAnalysisService.StockTrendResult stock) {
+        if (!stock.success() || stock.volume() == null) return "-";
+        double pct = stock.volume().dayChangePct();
+        return String.format("%s%.2f%%", pct >= 0 ? "+" : "", pct);
+    }
+
+    /** 涨跌幅配色：涨绿跌红（与邮件既有涨跌配色一致）；失败股灰色。 */
+    private static String dayChangeColor(com.autotrading.market.RightTrendAnalysisService.StockTrendResult stock) {
+        if (!stock.success() || stock.volume() == null) return "#8b949e";
+        return stock.volume().dayChangePct() >= 0 ? "#16a34a" : "#dc2626";
+    }
+
     private static String trendStripHtml(
             java.util.List<com.autotrading.market.RightTrendAnalysisService.StockTrendResult.TrendDay> history,
             boolean currentInTrend, boolean errorTail) {

@@ -230,6 +230,13 @@ function topBottomPill(signal, reason) {
   return pill;
 }
 
+function dayChangeCell(vol) {
+  if (!vol) return '<span class="pill dim">-</span>';
+  var pct = (vol.dayChangePct || 0).toFixed(2);
+  var cls = vol.dayChangePct >= 0 ? 'green' : 'red';
+  return '<span class="pill ' + cls + '">' + (vol.dayChangePct >= 0 ? '+' : '') + pct + '%</span>';
+}
+
 function volumeCell(vol) {
   if (!vol) return '<span class="pill dim">-</span>';
   var ratio = (vol.ratio || 0).toFixed(1) + '×';
@@ -342,6 +349,7 @@ function renderReport(report) {
         '<span class="stock-code">' + esc(s.stockKey) + '</span></td>' +
       '<td class="num"><span class="pill dim">' + esc(s.groupName || '') + '</span></td>' +
       '<td class="num">' + trendPill(s) + '</td>' +
+      '<td class="num">' + dayChangeCell(s.volume) + '</td>' +
       '<td class="num">' + confidencePill(s.confidence) + '</td>' +
       '<td class="num">' + topBottomPill(s.topBottomSignal, s.topBottomReason) + '</td>' +
       '<td class="num">' + volumeCell(s.volume) + '</td>' +
@@ -356,7 +364,7 @@ function renderReport(report) {
     html += '<div class="section"><div class="section-header">' +
       '<span>股票分析（按账户顺序）</span><span class="sub">' + stocks.length + ' 只</span></div>' +
       '<table><thead><tr>' +
-      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
+      '<th>股票</th><th class="num">分组</th><th class="num">右侧趋势</th><th class="num">涨跌幅</th><th class="num">置信度</th><th class="num">顶/底</th><th class="num">量比</th><th>关键信号</th><th>分析原因</th>' +
       '</tr></thead><tbody>' + stocks.map(stockRow).join('') + '</tbody></table></div>';
   }
 
